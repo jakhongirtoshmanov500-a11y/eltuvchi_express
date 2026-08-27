@@ -1,6 +1,6 @@
 from datetime import date
 from typing import Optional
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,7 @@ from models import (
 
 app = FastAPI(title="Eltuvchi Express API")
 
+# Statik fayllar va shablonlar (Logotip va rasmlar chiqishi uchun)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -32,8 +33,16 @@ async def startup_event():
         await conn.run_sync(Base.metadata.create_all)
     print("PostgreSQL jadvallari muvaffaqiyatli yaratildi!")
 
+# Routerlarni teglar (tags) bilan yaratamiz
+admin_router = APIRouter(tags=["Admin Dashboard"])
+settings_router = APIRouter(prefix="/admin/settings", tags=["Tizim Sozlamalari"])
+orders_router = APIRouter(prefix="/admin/orders", tags=["Buyurtmalar Boshqaruvi"])
+partners_router = APIRouter(prefix="/admin/partners", tags=["Do'konlar Boshqaruvi"])
+products_router = APIRouter(prefix="/admin/products", tags=["Mahsulotlar (Menu) Boshqaruvi"])
+
+
 # ==================== 1. ADMIN DASHBOARD ====================
-@app.get("/admin", response_class=HTMLResponse)
+@admin_router.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     today = date.today()
 
@@ -97,8 +106,9 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         }
     )
 
+
 # ==================== 2. TIZIM SOZLAMALARI ====================
-@app.post("/admin/settings")
+@settings_router.post("")
 async def update_settings(
     base_fee: float = Form(...),
     weather_condition: str = Form(...),
@@ -123,8 +133,9 @@ async def update_settings(
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
+
 # ==================== 3. BUYURTMALAR BOSHQARUVI ====================
-@app.post("/admin/orders/{order_id}/update")
+@orders_router.post("/{order_id}/update")
 async def update_order_status_and_courier(
     order_id: int,
     status: str = Form(...),
@@ -144,8 +155,9 @@ async def update_order_status_and_courier(
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
+
 # ==================== 4. DO'KONLAR BOSHQARUVI ====================
-@app.post("/admin/partners/create")
+@partners_router.post("/create")
 async def create_partner(
     brand_name: str = Form(...),
     category: str = Form(...),
@@ -163,7 +175,7 @@ async def create_partner(
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.post("/admin/partners/{partner_id}/toggle")
+@partners_router.post("/{partner_id}/toggle")
 async def toggle_partner_status(partner_id: int, db: AsyncSession = Depends(get_db)):
     partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
     partner = partner_query.scalars().first()
@@ -172,7 +184,7 @@ async def toggle_partner_status(partner_id: int, db: AsyncSession = Depends(get_
         await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.post("/admin/partners/{partner_id}/delete")
+@partners_router.post("/{partner_id}/delete")
 async def delete_partner(partner_id: int, db: AsyncSession = Depends(get_db)):
     partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
     partner = partner_query.scalars().first()
@@ -181,8 +193,9 @@ async def delete_partner(partner_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
+
 # ==================== 5. MAHSULOTLAR (MENU) BOSHQARUVI ====================
-@app.post("/admin/products/create")
+@products_router.post("/create")
 async def create_product(
     partner_id: int = Form(...),
     name: str = Form(...),
@@ -201,7 +214,7 @@ async def create_product(
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.post("/admin/products/{product_id}/toggle")
+@products_router.post("/{product_id}/toggle")
 async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
@@ -210,7 +223,7 @@ async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.post("/admin/products/{product_id}/delete")
+@products_router.post("/{product_id}/delete")
 async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
@@ -218,3 +231,11 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
         await db.delete(product)
         await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# Barcha routerlarni ilovaga ulash
+app.include_router(admin_router)
+app.include_router(settings_router)
+app.include_router(orders_router)
+app.include_router(partners_router)
+app.include_router(products_router)
