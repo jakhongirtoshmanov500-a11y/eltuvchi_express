@@ -39,8 +39,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    courier_profile = relationship("CourierProfile", back_populates="user", uselist=False)
-    partner_profile = relationship("PartnerProfile", back_populates="user", uselist=False)
+    # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
+    # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
+    courier_profile = relationship("CourierProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    partner_profile = relationship("PartnerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 class CourierProfile(Base):
     __tablename__ = "courier_profiles"
@@ -65,8 +67,7 @@ class PartnerProfile(Base):
     address = Column(String, nullable=False)
     is_open = Column(Boolean, default=True)
     balance = Column(Float, default=0.0)
-    
-    # YANGI QO'SHILGAN USTUNLAR
+
     commission_rate = Column(Float, default=10.0)
     opening_time = Column(String, default="09:00")
     closing_time = Column(String, default="23:00")
@@ -98,7 +99,7 @@ class Order(Base):
     total_price = Column(Float, nullable=False)
     delivery_fee = Column(Float, nullable=False)
     delivery_address = Column(String, nullable=False)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class SystemSetting(Base):

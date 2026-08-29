@@ -110,7 +110,7 @@
                                         <option value="{{ courier.id }}" {% if order.courier_id == courier.id %}selected{% endif %}>{{ courier.full_name }}</option>
                                         {% endfor %}
                                     </select>
-                                    <select name="status" class="text-xs p-1 border rounded dark:bg-gray-800">
+                                    <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800">
                                         {% for st in order_statuses %}
                                         <option value="{{ st }}" {% if order.status.value == st %}selected{% endif %}>{{ st }}</option>
                                         {% endfor %}
@@ -123,6 +123,90 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- COURIERS -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- Kuryer Qo'shish Formasi -->
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🛵 Yangi Kuryer Qo'shish</h2>
+                <form action="/admin/couriers/create" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Ism Familiya</label>
+                        <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Telefon raqami</label>
+                        <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Transport turi</label>
+                        <select name="transport_type" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                            <option value="walking">Piyoda</option>
+                            <option value="bicycle">Velosiped</option>
+                            <option value="scooter">Skuter</option>
+                            <option value="car">Avtomobil</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                </form>
+            </div>
+
+            <!-- Kuryerlar Ro'yxati -->
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Kuryerlar</h2>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
+                            <tr class="border-b text-xs">
+                                <th class="p-2">Ism</th>
+                                <th class="p-2">Telefon</th>
+                                <th class="p-2">Transport</th>
+                                <th class="p-2">Balans</th>
+                                <th class="p-2 text-center">Holat</th>
+                                <th class="p-2 text-center">Amallar</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y text-sm dark:divide-gray-700">
+                            {% for courier in all_couriers %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <td class="p-2 font-medium">{{ courier.full_name }}</td>
+                                <td class="p-2 text-xs">{{ courier.phone_number }}</td>
+                                <td class="p-2 text-xs">
+                                    {% if courier.courier_profile %}{{ courier.courier_profile.transport_type }}{% endif %}
+                                </td>
+                                <td class="p-2 text-xs font-semibold text-green-700">
+                                    {% if courier.courier_profile %}{{ "%.0f"|format(courier.courier_profile.balance) }} so'm{% endif %}
+                                </td>
+                                <td class="p-2 text-center">
+                                    <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if courier.is_active %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
+                                        {% if courier.is_active %}Faol{% else %}Faol emas{% endif %}
+                                    </span>
+                                </td>
+                                <td class="p-2 text-center">
+                                    <div class="inline-flex gap-1">
+                                        <form action="/admin/couriers/{{ courier.id }}/toggle" method="POST" class="inline">
+                                            <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
+                                                {% if courier.is_active %}O'chirish{% else %}Yoqish{% endif %}
+                                            </button>
+                                        </form>
+                                        <form action="/admin/couriers/{{ courier.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Kuryerni butunlay o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="p-3 text-center text-gray-400 text-xs">Hozircha kuryerlar yo'q</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
 
         <!-- PARTNERS & PRODUCTS -->
