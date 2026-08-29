@@ -49,6 +49,7 @@ orders_router = APIRouter(prefix="/admin/orders", tags=["Buyurtmalar Boshqaruvi"
 partners_router = APIRouter(prefix="/admin/partners", tags=["Do'konlar Boshqaruvi"])
 products_router = APIRouter(prefix="/admin/products", tags=["Mahsulotlar (Menu) Boshqaruvi"])
 couriers_router = APIRouter(prefix="/admin/couriers", tags=["Kuryerlar Boshqaruvi"])
+clients_router = APIRouter(prefix="/admin/clients", tags=["Mijozlar Boshqaruvi"])
 
 
 # ==================== 1. ADMIN DASHBOARD ====================
@@ -71,6 +72,20 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         .order_by(User.created_at.desc())
     )
     all_couriers = all_couriers_query.scalars().all()
+
+    # Mijozlar — har biri uchun buyurtmalar soni va umumiy xarajat
+    clients_query = await db.execute(
+        select(
+            User,
+            func.count(Order.id).label("order_count"),
+            func.coalesce(func.sum(Order.total_price), 0).label("total_spent"),
+        )
+        .outerjoin(Order, Order.client_id == User.id)
+        .where(User.role == UserRole.CLIENT)
+        .group_by(User.id)
+        .order_by(User.created_at.desc())
+    )
+    clients = clients_query.all()
 
     # Faol do'konlar
     partners_query = await db.execute(select(PartnerProfile))
@@ -119,6 +134,7 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             "orders": orders,
             "couriers": couriers,
             "all_couriers": all_couriers,
+            "clients": clients,
             "partners": partners,
             "products": products,
             "weather_conditions": [w.value for w in WeatherCondition],
@@ -408,6 +424,21 @@ async def delete_courier(user_id: int, db: AsyncSession = Depends(get_db)):
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ==================== 7. MIJOZLAR BOSHQARUVI ====================
+@clients_router.post("/{user_id}/toggle")
+async def toggle_client(user_id: int, db: AsyncSession = Depends(get_db)):
+    user_query = await db.execute(
+        select(User).where(User.id == user_id, User.role == UserRole.CLIENT)
+    )
+    client_user = user_query.scalars().first()
+    if not client_user:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    client_user.is_active = not client_user.is_active
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # Barcha routerlarni ilovaga ulash
 app.include_router(admin_router)
 app.include_router(settings_router)
@@ -415,3 +446,4 @@ app.include_router(orders_router)
 app.include_router(partners_router)
 app.include_router(products_router)
 app.include_router(couriers_router)
+app.include_router(clients_router)

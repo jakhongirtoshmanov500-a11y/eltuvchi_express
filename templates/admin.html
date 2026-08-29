@@ -12,7 +12,10 @@
 <body id="app-body" class="bg-gray-100 text-gray-800 transition-colors duration-300">
 
     <header id="main-header" class="bg-indigo-700 text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300">
-        <h1 class="text-xl font-bold">🚀 Eltuvchi Express — Boshqaruv Paneli</h1>
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <img src="/static/logo.png" alt="Eltuvchi Express" class="h-8 w-8 rounded-md object-cover" onerror="this.style.display='none'">
+            Eltuvchi Express — Boshqaruv Paneli
+        </h1>
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20">
                 <span class="text-xs font-semibold px-1">Mavzu:</span>
@@ -39,15 +42,16 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium">Ob-havo Sharoiti</label>
-                        <select name="weather_condition" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700">
+                        <select id="weather-select" name="weather_condition" onchange="applyWeatherMultiplier()" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700">
                             {% for w in weather_conditions %}
                             <option value="{{ w }}" {% if system_setting and system_setting.weather_condition.value == w %}selected{% endif %}>{{ w }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium">Ob-havo Koeffitsiyenti</label>
-                        <input type="number" step="0.1" name="weather_multiplier" value="{{ system_setting.weather_multiplier if system_setting else 1.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
+                        <label class="block text-sm font-medium">Ob-havo Koeffitsiyenti (avtomatik)</label>
+                        <input type="number" step="0.1" id="weather-multiplier-input" name="weather_multiplier" value="{{ system_setting.weather_multiplier if system_setting else 1.0 }}" class="w-full mt-1 p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-700 cursor-not-allowed" readonly required>
+                        <p class="text-[11px] text-gray-500 mt-1">Tanlangan ob-havoga qarab avtomatik hisoblanadi, qo'lda o'zgartirilmaydi.</p>
                     </div>
                     <button type="submit" class="theme-btn w-full bg-indigo-600 text-white py-2 rounded-lg font-bold">Saqlash</button>
                 </form>
@@ -58,7 +62,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="bg-indigo-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
                         <p class="text-xs uppercase font-semibold">Faol Kuryerlar</p>
-                        <p class="theme-text text-3xl font-extrabold text-indigo-700 mt-1">{{ active_couriers }}</p>
+                        <p class="theme-stat-number text-3xl font-extrabold text-indigo-700 mt-1">{{ active_couriers }}</p>
                     </div>
                     <div class="bg-green-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
                         <p class="text-xs uppercase font-semibold">Faol Do'konlar</p>
@@ -207,6 +211,51 @@
                 </div>
             </div>
 
+        </div>
+
+        <!-- CLIENTS -->
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">👥 Mijozlar</h2>
+            <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
+                        <tr class="border-b text-xs">
+                            <th class="p-2">Ism</th>
+                            <th class="p-2">Telefon</th>
+                            <th class="p-2">Buyurtmalar soni</th>
+                            <th class="p-2">Umumiy xarajat</th>
+                            <th class="p-2 text-center">Holat</th>
+                            <th class="p-2 text-center">Amallar</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y text-sm dark:divide-gray-700">
+                        {% for client, order_count, total_spent in clients %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td class="p-2 font-medium">{{ client.full_name }}</td>
+                            <td class="p-2 text-xs">{{ client.phone_number }}</td>
+                            <td class="p-2 text-center">{{ order_count }}</td>
+                            <td class="p-2 text-xs font-semibold text-green-700">{{ "%.0f"|format(total_spent) }} so'm</td>
+                            <td class="p-2 text-center">
+                                <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if client.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    {% if client.is_active %}Faol{% else %}Bloklangan{% endif %}
+                                </span>
+                            </td>
+                            <td class="p-2 text-center">
+                                <form action="/admin/clients/{{ client.id }}/toggle" method="POST" class="inline">
+                                    <button type="submit" class="text-xs px-2 py-1 rounded {% if client.is_active %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %} font-semibold">
+                                        {% if client.is_active %}Bloklash{% else %}Blokdan chiqarish{% endif %}
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- PARTNERS & PRODUCTS -->
@@ -418,6 +467,29 @@
             document.getElementById('edit-product-modal').classList.add('hidden');
         }
 
+        // Ob-havo sharoitiga qarab yetkazish narxi necha barobar oshishi.
+        // Bu — boshlang'ich taklif, real buyurtmalar tajribasiga qarab keyin o'zgartirilishi mumkin:
+        // - clear (oddiy kun): koeffitsiyent oshmaydi, chunki kuryer uchun qo'shimcha qiyinchilik yo'q
+        // - hot/cold (issiq/sovuq): kuryer uchun jismoniy og'irroq, +50%
+        // - windy (shamolli): ayniqsa velosiped/skuterga xalaqit beradi, +30%
+        // - rain (yomg'ir): harakat sekinlashadi, kiyim-jihoz kerak, +80%
+        // - snow (qor): eng og'ir va xavfli sharoit, +100%
+        const weatherMultipliers = {
+            clear: 1.0,
+            hot: 1.5,
+            cold: 1.5,
+            windy: 1.3,
+            rain: 1.8,
+            snow: 2.0
+        };
+
+        function applyWeatherMultiplier() {
+            const select = document.getElementById('weather-select');
+            const input = document.getElementById('weather-multiplier-input');
+            const selected = select.value;
+            input.value = (weatherMultipliers[selected] !== undefined ? weatherMultipliers[selected] : 1.0).toFixed(1);
+        }
+
         const themes = {
             indigo: { header: 'bg-indigo-700', text: 'text-indigo-700', btn: 'bg-indigo-600 hover:bg-indigo-700' },
             emerald: { header: 'bg-emerald-700', text: 'text-emerald-700', btn: 'bg-emerald-600 hover:bg-emerald-700' },
@@ -431,6 +503,7 @@
             const titles = document.querySelectorAll('.theme-title');
             const buttons = document.querySelectorAll('.theme-btn');
             const themeTexts = document.querySelectorAll('.theme-text');
+            const statNumbers = document.querySelectorAll('.theme-stat-number');
             const cards = document.querySelectorAll('.card-bg');
 
             if (themeName === 'dark') {
@@ -445,6 +518,7 @@
             header.className = `${themes[themeName].header} text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300`;
             titles.forEach(t => t.className = `theme-title text-lg font-bold mb-4 ${themes[themeName].text} transition-colors duration-300`);
             themeTexts.forEach(t => t.className = `theme-text p-3 font-semibold ${themes[themeName].text}`);
+            statNumbers.forEach(t => t.className = `theme-stat-number text-3xl font-extrabold mt-1 ${themes[themeName].text}`);
             buttons.forEach(b => b.className = `theme-btn ${themes[themeName].btn} text-white py-2 rounded-lg font-bold transition`);
 
             localStorage.setItem('admin_theme', themeName);
@@ -453,6 +527,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
             setTheme(savedTheme);
+            applyWeatherMultiplier();
         });
     </script>
 </body>
