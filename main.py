@@ -393,6 +393,40 @@ async def create_courier(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@couriers_router.post("/{user_id}/update")
+async def update_courier(
+    user_id: int,
+    full_name: str = Form(...),
+    phone_number: str = Form(...),
+    transport_type: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    user_query = await db.execute(
+        select(User)
+        .where(User.id == user_id, User.role == UserRole.COURIER)
+        .options(selectinload(User.courier_profile))
+    )
+    courier_user = user_query.scalars().first()
+    if not courier_user:
+        raise HTTPException(status_code=404, detail="Kuryer topilmadi")
+
+    # Telefon raqami boshqa foydalanuvchiga tegishli bo'lmasligini tekshiramiz
+    if phone_number != courier_user.phone_number:
+        existing_query = await db.execute(
+            select(User).where(User.phone_number == phone_number, User.id != user_id)
+        )
+        if existing_query.scalars().first():
+            raise HTTPException(status_code=400, detail="Bu telefon raqami boshqa foydalanuvchiga tegishli")
+
+    courier_user.full_name = full_name
+    courier_user.phone_number = phone_number
+    if courier_user.courier_profile:
+        courier_user.courier_profile.transport_type = transport_type
+
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @couriers_router.post("/{user_id}/toggle")
 async def toggle_courier(user_id: int, db: AsyncSession = Depends(get_db)):
     user_query = await db.execute(

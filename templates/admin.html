@@ -13,7 +13,7 @@
 
     <header id="main-header" class="bg-indigo-700 text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300">
         <h1 class="text-xl font-bold flex items-center gap-2">
-            <img src="/static/logo.png" alt="Eltuvchi Express" class="h-8 w-8 rounded-md object-cover" onerror="this.style.display='none'">
+            <img src="/static/images/logo.png" alt="Eltuvchi Express" class="h-9 w-9 object-contain" onerror="this.style.display='none'">
             Eltuvchi Express — Boshqaruv Paneli
         </h1>
         <div class="flex items-center gap-4">
@@ -190,6 +190,13 @@
                                 </td>
                                 <td class="p-2 text-center">
                                     <div class="inline-flex gap-1">
+                                        <button type="button"
+                                                data-id="{{ courier.id }}"
+                                                data-name="{{ courier.full_name }}"
+                                                data-phone="{{ courier.phone_number }}"
+                                                data-transport="{{ courier.courier_profile.transport_type if courier.courier_profile else 'walking' }}"
+                                                onclick="openEditCourierModal(this)"
+                                                class="text-blue-600 text-xs font-bold px-1">✏️</button>
                                         <form action="/admin/couriers/{{ courier.id }}/toggle" method="POST" class="inline">
                                             <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
                                                 {% if courier.is_active %}O'chirish{% else %}Yoqish{% endif %}
@@ -429,6 +436,26 @@
         </div>
     </div>
 
+    <div id="edit-courier-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-md w-full">
+            <h3 class="font-bold text-lg mb-4 dark:text-white">Kuryerni Tahrirlash</h3>
+            <form id="edit-courier-form" method="POST" class="space-y-3">
+                <input type="text" id="edit-courier-name" name="full_name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <input type="text" id="edit-courier-phone" name="phone_number" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <select id="edit-courier-transport" name="transport_type" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                    <option value="walking">Piyoda</option>
+                    <option value="bicycle">Velosiped</option>
+                    <option value="scooter">Skuter</option>
+                    <option value="car">Avtomobil</option>
+                </select>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openEditPartnerModal(btn) {
             const id = btn.dataset.id;
@@ -462,9 +489,23 @@
             document.getElementById('edit-product-modal').classList.remove('hidden');
         }
 
+        function openEditCourierModal(btn) {
+            const id = btn.dataset.id;
+            const name = btn.dataset.name;
+            const phone = btn.dataset.phone;
+            const transport = btn.dataset.transport;
+
+            document.getElementById('edit-courier-form').action = `/admin/couriers/${id}/update`;
+            document.getElementById('edit-courier-name').value = name;
+            document.getElementById('edit-courier-phone').value = phone;
+            document.getElementById('edit-courier-transport').value = transport;
+            document.getElementById('edit-courier-modal').classList.remove('hidden');
+        }
+
         function closeModals() {
             document.getElementById('edit-partner-modal').classList.add('hidden');
             document.getElementById('edit-product-modal').classList.add('hidden');
+            document.getElementById('edit-courier-modal').classList.add('hidden');
         }
 
         // Ob-havo sharoitiga qarab yetkazish narxi necha barobar oshishi.
