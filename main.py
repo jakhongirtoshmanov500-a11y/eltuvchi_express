@@ -1,5 +1,7 @@
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
+
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -11,27 +13,33 @@ from sqlalchemy.orm import selectinload
 from database import engine, Base, get_db
 import models
 from models import (
-    User, 
-    UserRole, 
-    Order, 
-    OrderStatus, 
-    PartnerProfile, 
+    User,
+    UserRole,
+    Order,
+    OrderStatus,
+    PartnerProfile,
     Product,
-    SystemSetting, 
-    WeatherCondition
+    SystemSetting,
+    WeatherCondition,
 )
 
-app = FastAPI(title="Eltuvchi Express API")
+
+# ==================== STARTUP / SHUTDOWN ====================
+# Eski @app.on_event("startup") o'rniga zamonaviy lifespan yondashuvi
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("PostgreSQL jadvallari muvaffaqiyatli yaratildi!")
+    yield
+    # Ilova to'xtaganda bajariladigan tozalash ishlari (hozircha kerak emas)
+
+
+app = FastAPI(title="Eltuvchi Express API", lifespan=lifespan)
 
 # Statik fayllar va shablonlar (Logotip va rasmlar chiqishi uchun)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
-@app.on_event("startup")
-async def startup_event():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("PostgreSQL jadvallari muvaffaqiyatli yaratildi!")
 
 # Routerlarni teglar (tags) bilan yaratamiz
 admin_router = APIRouter(tags=["Admin Dashboard"])
@@ -89,7 +97,7 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     products = products_query.scalars().all()
 
     return templates.TemplateResponse(
-        request=request, 
+        request=request,
         name="admin.html",
         context={
             "active_couriers": active_couriers,
@@ -102,8 +110,8 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             "partners": partners,
             "products": products,
             "weather_conditions": [w.value for w in WeatherCondition],
-            "order_statuses": [s.value for s in OrderStatus]
-        }
+            "order_statuses": [s.value for s in OrderStatus],
+        },
     )
 
 
@@ -113,21 +121,26 @@ async def update_settings(
     base_fee: float = Form(...),
     weather_condition: str = Form(...),
     weather_multiplier: float = Form(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
+    try:
+        weather_enum = WeatherCondition(weather_condition)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Noto'g'ri ob-havo qiymati")
+
     setting_query = await db.execute(select(SystemSetting))
     setting = setting_query.scalars().first()
 
     if not setting:
         setting = SystemSetting(
             base_delivery_fee=base_fee,
-            weather_condition=WeatherCondition(weather_condition),
-            weather_multiplier=weather_multiplier
+            weather_condition=weather_enum,
+            weather_multiplier=weather_multiplier,
         )
         db.add(setting)
     else:
         setting.base_delivery_fee = base_fee
-        setting.weather_condition = WeatherCondition(weather_condition)
+        setting.weather_condition = weather_enum
         setting.weather_multiplier = weather_multiplier
 
     await db.commit()
@@ -138,9 +151,12 @@ async def update_settings(
 @orders_router.post("/{order_id}/update")
 async def update_order_status_and_courier(
     order_id: int,
-    status: str = Form(...),
+    # DIQQAT: parametr nomi "status" emas, "new_status" — chunki "status"
+    # nomi FastAPI'ning status moduli bilan to'qnashib, status.HTTP_303_SEE_OTHER
+    # chaqirilganda dastur xatolik berardi.
+    new_status: str = Form(...),
     courier_id: Optional[int] = Form(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     order_query = await db.execute(select(Order).where(Order.id == order_id))
     order = order_query.scalars().first()
@@ -148,7 +164,11 @@ async def update_order_status_and_courier(
     if not order:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
 
-    order.status = OrderStatus(status)
+    try:
+        order.status = OrderStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Noto'g'ri buyurtma holati")
+
     if courier_id:
         order.courier_id = courier_id
 
@@ -162,35 +182,77 @@ async def create_partner(
     brand_name: str = Form(...),
     category: str = Form(...),
     address: str = Form(...),
-    db: AsyncSession = Depends(get_db)
+    commission_rate: float = Form(10.0),
+    opening_time: str = Form("09:00"),
+    closing_time: str = Form("23:00"),
+    db: AsyncSession = Depends(get_db),
 ):
     new_partner = PartnerProfile(
         brand_name=brand_name,
         category=category,
         address=address,
+        commission_rate=commission_rate,
+        opening_time=opening_time,
+        closing_time=closing_time,
         is_open=True,
-        balance=0.0
+        balance=0.0,
     )
     db.add(new_partner)
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
+
+# YANGI: admin.html'dagi tahrirlash (edit) modali shu route'ga murojaat qiladi,
+# lekin bu route avval umuman mavjud emas edi -> tugma bosilganda 404 chiqardi.
+@partners_router.post("/{partner_id}/update")
+async def update_partner(
+    partner_id: int,
+    brand_name: str = Form(...),
+    category: str = Form(...),
+    address: str = Form(...),
+    commission_rate: float = Form(...),
+    opening_time: str = Form(...),
+    closing_time: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
+    partner = partner_query.scalars().first()
+
+    if not partner:
+        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
+
+    partner.brand_name = brand_name
+    partner.category = category
+    partner.address = address
+    partner.commission_rate = commission_rate
+    partner.opening_time = opening_time
+    partner.closing_time = closing_time
+
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @partners_router.post("/{partner_id}/toggle")
 async def toggle_partner_status(partner_id: int, db: AsyncSession = Depends(get_db)):
     partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
     partner = partner_query.scalars().first()
-    if partner:
-        partner.is_open = not partner.is_open
-        await db.commit()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
+
+    partner.is_open = not partner.is_open
+    await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
 
 @partners_router.post("/{partner_id}/delete")
 async def delete_partner(partner_id: int, db: AsyncSession = Depends(get_db)):
     partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
     partner = partner_query.scalars().first()
-    if partner:
-        await db.delete(partner)
-        await db.commit()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
+
+    await db.delete(partner)
+    await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -201,35 +263,69 @@ async def create_product(
     name: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
+    # Mahsulot yaratishdan oldin, berilgan partner_id haqiqatan mavjudligini tekshiramiz
+    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
+    if not partner_query.scalars().first():
+        raise HTTPException(status_code=404, detail="Bunday do'kon topilmadi")
+
     new_product = Product(
         partner_id=partner_id,
         name=name,
         price=price,
         description=description,
-        is_available=True
+        is_available=True,
     )
     db.add(new_product)
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
+
+# YANGI: mahsulotni tahrirlash uchun avval mavjud bo'lmagan route
+@products_router.post("/{product_id}/update")
+async def update_product(
+    product_id: int,
+    name: str = Form(...),
+    price: float = Form(...),
+    description: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    prod_query = await db.execute(select(Product).where(Product.id == product_id))
+    product = prod_query.scalars().first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
+
+    product.name = name
+    product.price = price
+    product.description = description
+
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @products_router.post("/{product_id}/toggle")
 async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
-    if product:
-        product.is_available = not product.is_available
-        await db.commit()
+    if not product:
+        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
+
+    product.is_available = not product.is_available
+    await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
 
 @products_router.post("/{product_id}/delete")
 async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
-    if product:
-        await db.delete(product)
-        await db.commit()
+    if not product:
+        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
+
+    await db.delete(product)
+    await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
