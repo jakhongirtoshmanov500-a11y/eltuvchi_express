@@ -111,28 +111,6 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
-
-    # DIQQAT: mahsulot nomi va narxi shu yerda ham "suratga olinadi" (snapshot).
-    # Sabab: agar do'kon keyinchalik narxni oshirsa yoki mahsulotni o'chirsa,
-    # eski buyurtmalar tarixi baribir "o'sha paytda qancha tursa, shuncha" bo'lib qolishi kerak —
-    # aks holda hisobot va moliyaviy hisob-kitoblar buzilib ketadi.
-    product_name = Column(String, nullable=False)
-    unit_price = Column(Float, nullable=False)
-    quantity = Column(Integer, nullable=False, default=1)
-
-    order = relationship("Order", back_populates="items")
-    product = relationship("Product")
-
-    # cascade: buyurtma o'chirilsa, uning tarkibidagi qatorlar ham birga o'chadi
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-
-
-class OrderItem(Base):
-    __tablename__ = "order_items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
     # product_id nullable=True: agar mahsulot keyinchalik o'chirilsa ham,
     # buyurtma tarixi (order_item) saqlanib qoladi — faqat bog'lanish uziladi
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
