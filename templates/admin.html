@@ -17,6 +17,15 @@
             Eltuvchi Express — Boshqaruv Paneli
         </h1>
         <div class="flex items-center gap-4">
+            {% if is_owner %}
+            <div class="flex items-center gap-1 bg-white/10 p-1.5 rounded-lg border border-white/20 text-xs">
+                <span class="font-semibold px-1">Shahar:</span>
+                <a href="/admin" class="px-2 py-1 rounded {% if active_city_id is none %}bg-white text-indigo-700 font-bold{% endif %}">Barchasi</a>
+                {% for city in all_cities %}
+                <a href="/admin?city_id={{ city.id }}" class="px-2 py-1 rounded {% if active_city_id == city.id %}bg-white text-indigo-700 font-bold{% endif %}">{{ city.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
             <div class="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20">
                 <span class="text-xs font-semibold px-1">Mavzu:</span>
                 <button onclick="setTheme('indigo')" class="w-5 h-5 rounded-full bg-indigo-600 border-2 border-white"></button>
@@ -25,6 +34,10 @@
                 <button onclick="setTheme('dark')" class="w-5 h-5 rounded-full bg-gray-900 border-2 border-white"></button>
             </div>
             <span class="bg-green-500 text-xs font-bold px-3 py-1 rounded-full">Tizim Faol</span>
+            <div class="flex items-center gap-2 text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/20">
+                <span>👤 {{ current_user.full_name }} ({% if is_owner %}Egasi{% else %}Operator{% endif %})</span>
+                <a href="/logout" class="text-red-200 hover:text-red-100 font-semibold">Chiqish</a>
+            </div>
         </div>
     </header>
 
@@ -33,6 +46,7 @@
         <!-- DASHBOARD & SETTINGS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
+            {% if is_owner %}
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tizim Sozlamalari</h2>
                 <form action="/admin/settings" method="POST" class="space-y-4">
@@ -61,8 +75,9 @@
                     <button type="submit" class="theme-btn w-full bg-indigo-600 text-white py-2 rounded-lg font-bold">Saqlash</button>
                 </form>
             </div>
+            {% endif %}
 
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 {% if is_owner %}md:col-span-2{% else %}md:col-span-3{% endif %}">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📊 Bugungi Real-Vaqt Statistikasi</h2>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="bg-indigo-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
@@ -161,23 +176,32 @@
                             <td class="theme-text p-3 font-semibold text-indigo-600">{{ order.total_price }} so'm</td>
                             <td class="p-3 font-semibold">{{ order.delivery_fee }} so'm</td>
                             <td class="p-3">
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ order.status.value }}</span>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ status_labels.get(order.status.value, order.status.value) }}</span>
                             </td>
                             <td class="p-3 text-center">
-                                <form action="/admin/orders/{{ order.id }}/update" method="POST" class="inline-flex gap-1">
-                                    <select name="courier_id" class="text-xs p-1 border rounded dark:bg-gray-800">
-                                        <option value="">Kuryer tanlang</option>
-                                        {% for courier in couriers %}
-                                        <option value="{{ courier.id }}" {% if order.courier_id == courier.id %}selected{% endif %}>{{ courier.full_name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800">
-                                        {% for st in order_statuses %}
-                                        <option value="{{ st }}" {% if order.status.value == st %}selected{% endif %}>{{ st }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
-                                </form>
+                                <div class="flex flex-col gap-1 items-center">
+                                    {% if order.status.value in next_status_map %}
+                                    <form action="/admin/orders/{{ order.id }}/update" method="POST">
+                                        <input type="hidden" name="new_status" value="{{ next_status_map[order.status.value][0] }}">
+                                        <input type="hidden" name="courier_id" value="{{ order.courier_id or '' }}">
+                                        <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold whitespace-nowrap">{{ next_status_map[order.status.value][1] }}</button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="/admin/orders/{{ order.id }}/update" method="POST" class="inline-flex gap-1">
+                                        <select name="courier_id" class="text-xs p-1 border rounded dark:bg-gray-800">
+                                            <option value="">Kuryer tanlang</option>
+                                            {% for courier in couriers %}
+                                            <option value="{{ courier.id }}" {% if order.courier_id == courier.id %}selected{% endif %}>{{ courier.full_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800">
+                                            {% for st in order_statuses %}
+                                            <option value="{{ st }}" {% if order.status.value == st %}selected{% endif %}>{{ status_labels.get(st, st) }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         <tr id="order-details-{{ order.id }}" class="hidden bg-gray-50 dark:bg-gray-800/50">
@@ -224,6 +248,17 @@
                             <option value="car">Avtomobil</option>
                         </select>
                     </div>
+                    {% if is_owner %}
+                    <div>
+                        <label class="block text-xs font-medium">Shahar</label>
+                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <option value="">Shaharni tanlang</option>
+                            {% for city in all_cities %}
+                            <option value="{{ city.id }}" {% if active_city_id == city.id %}selected{% endif %}>{{ city.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
                 </form>
             </div>
@@ -238,6 +273,7 @@
                                 <th class="p-2">Ism</th>
                                 <th class="p-2">Telefon</th>
                                 <th class="p-2">Transport</th>
+                                {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
                                 <th class="p-2">Balans</th>
                                 <th class="p-2 text-center">Holat</th>
                                 <th class="p-2 text-center">Amallar</th>
@@ -251,6 +287,7 @@
                                 <td class="p-2 text-xs">
                                     {% if courier.courier_profile %}{{ courier.courier_profile.transport_type }}{% endif %}
                                 </td>
+                                {% if is_owner %}<td class="p-2 text-xs">{{ courier.city.name if courier.city else '—' }}</td>{% endif %}
                                 <td class="p-2 text-xs font-semibold text-green-700">
                                     {% if courier.courier_profile %}{{ "%.0f"|format(courier.courier_profile.balance) }} so'm{% endif %}
                                 </td>
@@ -266,6 +303,7 @@
                                                 data-name="{{ courier.full_name }}"
                                                 data-phone="{{ courier.phone_number }}"
                                                 data-transport="{{ courier.courier_profile.transport_type if courier.courier_profile else 'walking' }}"
+                                                data-city-id="{{ courier.city_id or '' }}"
                                                 onclick="openEditCourierModal(this)"
                                                 class="text-blue-600 text-xs font-bold px-1">✏️</button>
                                         <form action="/admin/couriers/{{ courier.id }}/toggle" method="POST" class="inline">
@@ -336,10 +374,92 @@
             </div>
         </div>
 
+        {% if is_owner %}
+        <!-- OPERATORLAR (faqat OWNER) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🧑‍💼 Yangi Operator Qo'shish</h2>
+                <p class="text-xs text-gray-500 mb-3">Operator faqat o'ziga biriktirilgan shaharning ma'lumotlarini ko'radi va boshqaradi.</p>
+                <form action="/admin/operators/create" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Ism Familiya</label>
+                        <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Telefon raqami (login uchun)</label>
+                        <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Parol</label>
+                        <input type="password" name="password" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Biriktirilgan shahar</label>
+                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <option value="">Shaharni tanlang</option>
+                            {% for city in all_cities %}
+                            <option value="{{ city.id }}">{{ city.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                </form>
+            </div>
+
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Operatorlar</h2>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
+                            <tr class="border-b text-xs">
+                                <th class="p-2">Ism</th>
+                                <th class="p-2">Telefon</th>
+                                <th class="p-2">Shahar</th>
+                                <th class="p-2 text-center">Holat</th>
+                                <th class="p-2 text-center">Amallar</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y text-sm dark:divide-gray-700">
+                            {% for operator in operators %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <td class="p-2 font-medium">{{ operator.full_name }}</td>
+                                <td class="p-2 text-xs">{{ operator.phone_number }}</td>
+                                <td class="p-2 text-xs">{{ operator.city.name if operator.city else '—' }}</td>
+                                <td class="p-2 text-center">
+                                    <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if operator.is_active %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
+                                        {% if operator.is_active %}Faol{% else %}Faol emas{% endif %}
+                                    </span>
+                                </td>
+                                <td class="p-2 text-center">
+                                    <div class="inline-flex gap-1">
+                                        <form action="/admin/operators/{{ operator.id }}/toggle" method="POST" class="inline">
+                                            <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
+                                                {% if operator.is_active %}O'chirish{% else %}Yoqish{% endif %}
+                                            </button>
+                                        </form>
+                                        <form action="/admin/operators/{{ operator.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Operatorni butunlay o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="p-3 text-center text-gray-400 text-xs">Hozircha operatorlar yo'q</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- PARTNERS & PRODUCTS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            <!-- Do'kon Qo'shish Formasi -->
+
+            {% if is_owner %}
+            <!-- Do'kon Qo'shish Formasi (faqat OWNER) -->
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🏪 Yangi Do'kon Qo'shish</h2>
                 <form action="/admin/partners/create" method="POST" class="space-y-3">
@@ -352,13 +472,22 @@
                         <input type="text" name="category" placeholder="Fast Food" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
                     </div>
                     <div>
+                        <label class="block text-xs font-medium">Shahar</label>
+                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <option value="">Shaharni tanlang</option>
+                            {% for city in all_cities %}
+                            <option value="{{ city.id }}">{{ city.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs font-medium">Manzil</label>
-                        <input type="text" name="address" placeholder="Toshkent sh." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                        <input type="text" name="address" placeholder="Mustaqillik ko'chasi, 5" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <div>
                             <label class="block text-xs font-medium">Komissiya (%)</label>
-                            <input type="number" step="0.1" name="commission_rate" value="10.0" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <input type="number" step="0.1" name="commission_rate" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
                         </div>
                         <div>
                             <label class="block text-xs font-medium">Ish vaqti</label>
@@ -372,8 +501,10 @@
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
                 </form>
             </div>
+            {% endif %}
 
-            <!-- Mahsulot Qo'shish Formasi -->
+            {% if is_owner %}
+            <!-- Mahsulot Qo'shish Formasi (faqat OWNER) -->
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
                 <form action="/admin/products/create" method="POST" class="space-y-3">
@@ -401,6 +532,7 @@
                     <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">+ Saqlash</button>
                 </form>
             </div>
+            {% endif %}
 
             <!-- Do'konlar va Mahsulotlar Ro'yxati -->
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
@@ -411,6 +543,7 @@
                         <div class="flex justify-between items-center mb-1">
                             <span class="font-bold text-sm">{{ partner.brand_name }}</span>
                             <div class="flex items-center gap-1">
+                                {% if is_owner %}
                                 <button type="button" 
                                         data-id="{{ partner.id }}"
                                         data-name="{{ partner.brand_name }}"
@@ -419,19 +552,23 @@
                                         data-commission="{{ partner.commission_rate }}"
                                         data-open="{{ partner.opening_time }}"
                                         data-close="{{ partner.closing_time }}"
+                                        data-city-id="{{ partner.city_id or '' }}"
                                         onclick="openEditPartnerModal(this)" 
                                         class="text-blue-600 text-xs font-bold px-1">✏️</button>
+                                {% endif %}
                                 <form action="/admin/partners/{{ partner.id }}/toggle" method="POST" class="inline">
                                     <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if partner.is_open %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
                                         {% if partner.is_open %}Ochiq{% else %}Yopiq{% endif %}
                                     </button>
                                 </form>
+                                {% if is_owner %}
                                 <form action="/admin/partners/{{ partner.id }}/delete" method="POST" class="inline">
                                     <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </div>
-                        <p class="text-[11px] text-gray-500">📍 {{ partner.address }} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }} | 🏷️ {{ partner.commission_rate }}%</p>
+                        <p class="text-[11px] text-gray-500">📍 {{ partner.address }} {% if partner.city %}| 🏙️ {{ partner.city.name }}{% endif %} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }} | 🏷️ {{ partner.commission_rate }}%</p>
                         
                         <div class="divide-y dark:divide-gray-700 border-t dark:border-gray-700 pt-2 mt-2">
                             {% for product in products %}
@@ -442,6 +579,7 @@
                                         <p class="text-green-600 font-bold">{{ product.price }} so'm</p>
                                     </div>
                                     <div class="flex items-center gap-1">
+                                        {% if is_owner %}
                                         <button type="button" 
                                                 data-id="{{ product.id }}"
                                                 data-name="{{ product.name }}"
@@ -449,14 +587,17 @@
                                                 data-desc="{{ product.description or '' }}"
                                                 onclick="openEditProductModal(this)" 
                                                 class="text-blue-600 font-bold px-1 text-xs">✏️</button>
+                                        {% endif %}
                                         <form action="/admin/products/{{ product.id }}/toggle" method="POST" class="inline">
                                             <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] {% if product.is_available %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
                                                 {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
                                             </button>
                                         </form>
+                                        {% if is_owner %}
                                         <form action="/admin/products/{{ product.id }}/delete" method="POST" class="inline">
                                             <button type="submit" class="text-red-600 font-bold px-1">✕</button>
                                         </form>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% endif %}
@@ -478,6 +619,11 @@
             <form id="edit-partner-form" method="POST" class="space-y-3">
                 <input type="text" id="edit-partner-name" name="brand_name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 <input type="text" id="edit-partner-category" name="category" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <select id="edit-partner-city" name="city_id" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                    {% for city in all_cities %}
+                    <option value="{{ city.id }}">{{ city.name }}</option>
+                    {% endfor %}
+                </select>
                 <input type="text" id="edit-partner-address" name="address" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 <input type="number" step="0.1" id="edit-partner-commission" name="commission_rate" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 <div class="flex gap-2">
@@ -519,6 +665,13 @@
                     <option value="scooter">Skuter</option>
                     <option value="car">Avtomobil</option>
                 </select>
+                {% if is_owner %}
+                <select id="edit-courier-city" name="city_id" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                    {% for city in all_cities %}
+                    <option value="{{ city.id }}">{{ city.name }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">Saqlash</button>
@@ -613,10 +766,12 @@
             const commission = btn.dataset.commission;
             const open = btn.dataset.open;
             const close = btn.dataset.close;
+            const cityId = btn.dataset.cityId;
 
             document.getElementById('edit-partner-form').action = `/admin/partners/${id}/update`;
             document.getElementById('edit-partner-name').value = name;
             document.getElementById('edit-partner-category').value = category;
+            document.getElementById('edit-partner-city').value = cityId;
             document.getElementById('edit-partner-address').value = address;
             document.getElementById('edit-partner-commission').value = commission;
             document.getElementById('edit-partner-open').value = open;
@@ -642,11 +797,15 @@
             const name = btn.dataset.name;
             const phone = btn.dataset.phone;
             const transport = btn.dataset.transport;
+            const cityId = btn.dataset.cityId;
 
             document.getElementById('edit-courier-form').action = `/admin/couriers/${id}/update`;
             document.getElementById('edit-courier-name').value = name;
             document.getElementById('edit-courier-phone').value = phone;
             document.getElementById('edit-courier-transport').value = transport;
+            // Shahar select faqat OWNER uchun renderlanadi, shuning uchun mavjudligini tekshiramiz
+            const cityEl = document.getElementById('edit-courier-city');
+            if (cityEl) cityEl.value = cityId;
             document.getElementById('edit-courier-modal').classList.remove('hidden');
         }
 

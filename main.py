@@ -1,594 +1,157 @@
-from contextlib import asynccontextmanager
-from datetime import date
-from typing import List, Optional
-import json
-
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
-
-from database import engine, Base, get_db
-import models
-from models import (
-    User,
-    UserRole,
-    Order,
-    OrderStatus,
-    OrderItem,
-    PartnerProfile,
-    Product,
-    SystemSetting,
-    WeatherCondition,
-    CourierProfile,
-)
-
-
-# ==================== STARTUP / SHUTDOWN ====================
-# Eski @app.on_event("startup") o'rniga zamonaviy lifespan yondashuvi
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("PostgreSQL jadvallari muvaffaqiyatli yaratildi!")
-    yield
-    # Ilova to'xtaganda bajariladigan tozalash ishlari (hozircha kerak emas)
-
-
-app = FastAPI(title="Eltuvchi Express API", lifespan=lifespan)
-
-# Statik fayllar va shablonlar (Logotip va rasmlar chiqishi uchun)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-# Routerlarni teglar (tags) bilan yaratamiz
-admin_router = APIRouter(tags=["Admin Dashboard"])
-settings_router = APIRouter(prefix="/admin/settings", tags=["Tizim Sozlamalari"])
-orders_router = APIRouter(prefix="/admin/orders", tags=["Buyurtmalar Boshqaruvi"])
-partners_router = APIRouter(prefix="/admin/partners", tags=["Do'konlar Boshqaruvi"])
-products_router = APIRouter(prefix="/admin/products", tags=["Mahsulotlar (Menu) Boshqaruvi"])
-couriers_router = APIRouter(prefix="/admin/couriers", tags=["Kuryerlar Boshqaruvi"])
-clients_router = APIRouter(prefix="/admin/clients", tags=["Mijozlar Boshqaruvi"])
-
-
-# ==================== 1. ADMIN DASHBOARD ====================
-@admin_router.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
-    today = date.today()
-
-    # Faol kuryerlar
-    couriers_query = await db.execute(
-        select(User).where(User.role == UserRole.COURIER, User.is_active == True)
-    )
-    couriers = couriers_query.scalars().all()
-    active_couriers = len(couriers)
-
-    # Kuryerlar boshqaruvi jadvali uchun — faol va nofaol barchasi, profili bilan
-    all_couriers_query = await db.execute(
-        select(User)
-        .where(User.role == UserRole.COURIER)
-        .options(selectinload(User.courier_profile))
-        .order_by(User.created_at.desc())
-    )
-    all_couriers = all_couriers_query.scalars().all()
-
-    # Mijozlar — har biri uchun buyurtmalar soni va umumiy xarajat
-    clients_query = await db.execute(
-        select(
-            User,
-            func.count(Order.id).label("order_count"),
-            func.coalesce(func.sum(Order.total_price), 0).label("total_spent"),
-        )
-        .outerjoin(Order, Order.client_id == User.id)
-        .where(User.role == UserRole.CLIENT)
-        .group_by(User.id)
-        .order_by(User.created_at.desc())
-    )
-    clients = clients_query.all()
-
-    # Faol do'konlar
-    partners_query = await db.execute(select(PartnerProfile))
-    partners = partners_query.scalars().all()
-    active_partners = sum(1 for p in partners if p.is_open)
-
-    # Bugungi buyurtmalar soni
-    orders_count_query = await db.execute(
-        select(func.count(Order.id)).where(func.date(Order.created_at) == today)
-    )
-    today_orders_count = orders_count_query.scalar() or 0
-
-    # Bugungi tushum (DELIVERED bo'lgan yetkazish to'lovlari yig'indisi)
-    revenue_query = await db.execute(
-        select(func.sum(Order.delivery_fee))
-        .where(func.date(Order.created_at) == today, Order.status == OrderStatus.DELIVERED)
-    )
-    today_revenue_val = revenue_query.scalar() or 0.0
-    today_revenue = f"{today_revenue_val:,.0f}".replace(",", " ")
-
-    # Barcha buyurtmalar (tarkibi — items — bilan birga)
-    all_orders_query = await db.execute(
-        select(Order)
-        .options(selectinload(Order.items))
-        .order_by(Order.created_at.desc())
-    )
-    orders = all_orders_query.scalars().all()
-
-    # Tizim sozlamasi
-    setting_query = await db.execute(select(SystemSetting))
-    system_setting = setting_query.scalars().first()
-
-    # Barcha mahsulotlar (Do'kon ma'lumoti bilan)
-    products_query = await db.execute(
-        select(Product).options(selectinload(Product.partner))
-    )
-    products = products_query.scalars().all()
-
-    # "Qo'lda buyurtma yaratish" formasi uchun — mahsulotlarni JS tomonida
-    # do'konga qarab guruhlab ko'rsatish maqsadida JSON qilib tayyorlaymiz
-    products_json = json.dumps([
-        {
-            "id": p.id,
-            "name": p.name,
-            "price": p.price,
-            "partner_id": p.partner_id,
-            "partner_name": p.partner.brand_name if p.partner else "",
-        }
-        for p in products if p.is_available
-    ])
-
-    # Hozirgi ob-havoga mos tavsiya etilgan yetkazish narxi (admin buni forma ochilganda
-    # qo'lda o'zgartirishi ham mumkin — bu shunchaki boshlang'ich taklif)
-    if system_setting:
-        suggested_delivery_fee = system_setting.base_delivery_fee * system_setting.weather_multiplier
-    else:
-        suggested_delivery_fee = 10000.0
-
-    return templates.TemplateResponse(
-        request=request,
-        name="admin.html",
-        context={
-            "active_couriers": active_couriers,
-            "active_partners": active_partners,
-            "today_orders_count": today_orders_count,
-            "today_revenue": today_revenue,
-            "system_setting": system_setting,
-            "orders": orders,
-            "couriers": couriers,
-            "all_couriers": all_couriers,
-            "clients": clients,
-            "partners": partners,
-            "products": products,
-            "products_json": products_json,
-            "suggested_delivery_fee": suggested_delivery_fee,
-            "weather_conditions": [w.value for w in WeatherCondition],
-            "order_statuses": [s.value for s in OrderStatus],
-        },
-    )
-
-
-# ==================== 2. TIZIM SOZLAMALARI ====================
-@settings_router.post("")
-async def update_settings(
-    base_fee: float = Form(...),
-    weather_condition: str = Form(...),
-    weather_multiplier: float = Form(...),
-    service_commission_percent: float = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        weather_enum = WeatherCondition(weather_condition)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Noto'g'ri ob-havo qiymati")
-
-    setting_query = await db.execute(select(SystemSetting))
-    setting = setting_query.scalars().first()
-
-    if not setting:
-        setting = SystemSetting(
-            base_delivery_fee=base_fee,
-            weather_condition=weather_enum,
-            weather_multiplier=weather_multiplier,
-            service_commission_percent=service_commission_percent,
-        )
-        db.add(setting)
-    else:
-        setting.base_delivery_fee = base_fee
-        setting.weather_condition = weather_enum
-        setting.weather_multiplier = weather_multiplier
-        setting.service_commission_percent = service_commission_percent
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ==================== 3. BUYURTMALAR BOSHQARUVI ====================
-@orders_router.post("/create")
-async def create_order(
-    partner_id: int = Form(...),
-    client_name: str = Form(...),
-    client_phone: str = Form(...),
-    delivery_address: str = Form(...),
-    product_ids: List[int] = Form(...),
-    quantities: List[int] = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    if len(product_ids) != len(quantities) or len(product_ids) == 0:
-        raise HTTPException(status_code=400, detail="Mahsulotlar ro'yxati noto'g'ri")
-
-    # Mijozni telefon raqami bo'yicha topamiz, topilmasa yangi yaratamiz —
-    # chunki hozircha mijoz ilovasi yo'q, buyurtmalar admin/dispetcher orqali
-    # telefon qo'ng'irog'idan qo'lda kiritiladi.
-    client_query = await db.execute(select(User).where(User.phone_number == client_phone))
-    client = client_query.scalars().first()
-    if not client:
-        client = User(
-            full_name=client_name,
-            phone_number=client_phone,
-            role=UserRole.CLIENT,
-            is_active=True,
-        )
-        db.add(client)
-        await db.flush()
-
-    # DIQQAT: umumiy summani frontend'dan ishonib qabul qilmaymiz — buni har doim
-    # backend o'zi, bazadagi haqiqiy narxlar asosida hisoblaydi. Aks holda kimdir
-    # forma orqali xato/qasddan boshqa summa yuborishi mumkin edi.
-    total_price = 0.0
-    order_items_data = []
-    for product_id, qty in zip(product_ids, quantities):
-        if qty <= 0:
-            continue
-        prod_query = await db.execute(
-            select(Product).where(Product.id == product_id, Product.partner_id == partner_id)
-        )
-        product = prod_query.scalars().first()
-        if not product:
-            raise HTTPException(status_code=400, detail=f"Mahsulot topilmadi (id={product_id})")
-
-        subtotal = product.price * qty
-        total_price += subtotal
-        order_items_data.append((product, qty))
-
-    if not order_items_data:
-        raise HTTPException(status_code=400, detail="Kamida bitta mahsulot tanlanishi kerak")
-
-    # Yetkazish narxi — hozirgi tizim sozlamasidan (ob-havo koeffitsiyenti bilan)
-    setting_query = await db.execute(select(SystemSetting))
-    setting = setting_query.scalars().first()
-    if setting:
-        delivery_fee = setting.base_delivery_fee * setting.weather_multiplier
-    else:
-        delivery_fee = 10000.0
-
-    new_order = Order(
-        client_id=client.id,
-        partner_id=partner_id,
-        status=OrderStatus.CREATED,
-        total_price=total_price,
-        delivery_fee=delivery_fee,
-        delivery_address=delivery_address,
-    )
-    db.add(new_order)
-    await db.flush()  # new_order.id ni olish uchun
-
-    for product, qty in order_items_data:
-        db.add(OrderItem(
-            order_id=new_order.id,
-            product_id=product.id,
-            product_name=product.name,  # narx/nom o'sha paytdagi holicha "suratga olinadi"
-            unit_price=product.price,
-            quantity=qty,
-        ))
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@orders_router.post("/{order_id}/update")
-async def update_order_status_and_courier(
-    order_id: int,
-    # DIQQAT: parametr nomi "status" emas, "new_status" — chunki "status"
-    # nomi FastAPI'ning status moduli bilan to'qnashib, status.HTTP_303_SEE_OTHER
-    # chaqirilganda dastur xatolik berardi.
-    new_status: str = Form(...),
-    courier_id: Optional[int] = Form(None),
-    db: AsyncSession = Depends(get_db),
-):
-    order_query = await db.execute(select(Order).where(Order.id == order_id))
-    order = order_query.scalars().first()
-
-    if not order:
-        raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
-
-    try:
-        order.status = OrderStatus(new_status)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Noto'g'ri buyurtma holati")
-
-    if courier_id:
-        order.courier_id = courier_id
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ==================== 4. DO'KONLAR BOSHQARUVI ====================
-@partners_router.post("/create")
-async def create_partner(
-    brand_name: str = Form(...),
-    category: str = Form(...),
-    address: str = Form(...),
-    commission_rate: float = Form(10.0),
-    opening_time: str = Form("09:00"),
-    closing_time: str = Form("23:00"),
-    db: AsyncSession = Depends(get_db),
-):
-    new_partner = PartnerProfile(
-        brand_name=brand_name,
-        category=category,
-        address=address,
-        commission_rate=commission_rate,
-        opening_time=opening_time,
-        closing_time=closing_time,
-        is_open=True,
-        balance=0.0,
-    )
-    db.add(new_partner)
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# YANGI: admin.html'dagi tahrirlash (edit) modali shu route'ga murojaat qiladi,
-# lekin bu route avval umuman mavjud emas edi -> tugma bosilganda 404 chiqardi.
-@partners_router.post("/{partner_id}/update")
-async def update_partner(
-    partner_id: int,
-    brand_name: str = Form(...),
-    category: str = Form(...),
-    address: str = Form(...),
-    commission_rate: float = Form(...),
-    opening_time: str = Form(...),
-    closing_time: str = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
-    partner = partner_query.scalars().first()
-
-    if not partner:
-        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
-
-    partner.brand_name = brand_name
-    partner.category = category
-    partner.address = address
-    partner.commission_rate = commission_rate
-    partner.opening_time = opening_time
-    partner.closing_time = closing_time
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@partners_router.post("/{partner_id}/toggle")
-async def toggle_partner_status(partner_id: int, db: AsyncSession = Depends(get_db)):
-    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
-    partner = partner_query.scalars().first()
-    if not partner:
-        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
-
-    partner.is_open = not partner.is_open
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@partners_router.post("/{partner_id}/delete")
-async def delete_partner(partner_id: int, db: AsyncSession = Depends(get_db)):
-    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
-    partner = partner_query.scalars().first()
-    if not partner:
-        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
-
-    await db.delete(partner)
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ==================== 5. MAHSULOTLAR (MENU) BOSHQARUVI ====================
-@products_router.post("/create")
-async def create_product(
-    partner_id: int = Form(...),
-    name: str = Form(...),
-    price: float = Form(...),
-    description: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
-):
-    # Mahsulot yaratishdan oldin, berilgan partner_id haqiqatan mavjudligini tekshiramiz
-    partner_query = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
-    if not partner_query.scalars().first():
-        raise HTTPException(status_code=404, detail="Bunday do'kon topilmadi")
-
-    new_product = Product(
-        partner_id=partner_id,
-        name=name,
-        price=price,
-        description=description,
-        is_available=True,
-    )
-    db.add(new_product)
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# YANGI: mahsulotni tahrirlash uchun avval mavjud bo'lmagan route
-@products_router.post("/{product_id}/update")
-async def update_product(
-    product_id: int,
-    name: str = Form(...),
-    price: float = Form(...),
-    description: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
-):
-    prod_query = await db.execute(select(Product).where(Product.id == product_id))
-    product = prod_query.scalars().first()
-
-    if not product:
-        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-
-    product.name = name
-    product.price = price
-    product.description = description
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@products_router.post("/{product_id}/toggle")
-async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
-    prod_query = await db.execute(select(Product).where(Product.id == product_id))
-    product = prod_query.scalars().first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-
-    product.is_available = not product.is_available
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@products_router.post("/{product_id}/delete")
-async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
-    prod_query = await db.execute(select(Product).where(Product.id == product_id))
-    product = prod_query.scalars().first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-
-    await db.delete(product)
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ==================== 6. KURYERLAR BOSHQARUVI ====================
-@couriers_router.post("/create")
-async def create_courier(
-    full_name: str = Form(...),
-    phone_number: str = Form(...),
-    transport_type: str = Form("walking"),
-    db: AsyncSession = Depends(get_db),
-):
-    # Telefon raqami unique bo'lgani uchun, avval band emasligini tekshiramiz —
-    # aks holda IntegrityError chiqib, tushunarsiz 500-xatolik ko'rinardi.
-    existing_query = await db.execute(select(User).where(User.phone_number == phone_number))
-    if existing_query.scalars().first():
-        raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon ro'yxatdan o'tgan")
-
-    new_user = User(
-        full_name=full_name,
-        phone_number=phone_number,
-        role=UserRole.COURIER,
-        is_active=True,
-    )
-    db.add(new_user)
-    await db.flush()  # new_user.id ni olish uchun, commit qilmasdan turib
-
-    new_courier_profile = CourierProfile(
-        user_id=new_user.id,
-        transport_type=transport_type,
-        is_approved=True,  # admin o'zi qo'shgani uchun avtomatik tasdiqlanadi
-        is_online=False,
-        balance=0.0,
-    )
-    db.add(new_courier_profile)
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@couriers_router.post("/{user_id}/update")
-async def update_courier(
-    user_id: int,
-    full_name: str = Form(...),
-    phone_number: str = Form(...),
-    transport_type: str = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    user_query = await db.execute(
-        select(User)
-        .where(User.id == user_id, User.role == UserRole.COURIER)
-        .options(selectinload(User.courier_profile))
-    )
-    courier_user = user_query.scalars().first()
-    if not courier_user:
-        raise HTTPException(status_code=404, detail="Kuryer topilmadi")
-
-    # Telefon raqami boshqa foydalanuvchiga tegishli bo'lmasligini tekshiramiz
-    if phone_number != courier_user.phone_number:
-        existing_query = await db.execute(
-            select(User).where(User.phone_number == phone_number, User.id != user_id)
-        )
-        if existing_query.scalars().first():
-            raise HTTPException(status_code=400, detail="Bu telefon raqami boshqa foydalanuvchiga tegishli")
-
-    courier_user.full_name = full_name
-    courier_user.phone_number = phone_number
-    if courier_user.courier_profile:
-        courier_user.courier_profile.transport_type = transport_type
-
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@couriers_router.post("/{user_id}/toggle")
-async def toggle_courier(user_id: int, db: AsyncSession = Depends(get_db)):
-    user_query = await db.execute(
-        select(User).where(User.id == user_id, User.role == UserRole.COURIER)
-    )
-    courier_user = user_query.scalars().first()
-    if not courier_user:
-        raise HTTPException(status_code=404, detail="Kuryer topilmadi")
-
-    courier_user.is_active = not courier_user.is_active
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@couriers_router.post("/{user_id}/delete")
-async def delete_courier(user_id: int, db: AsyncSession = Depends(get_db)):
-    user_query = await db.execute(
-        select(User).where(User.id == user_id, User.role == UserRole.COURIER)
-    )
-    courier_user = user_query.scalars().first()
-    if not courier_user:
-        raise HTTPException(status_code=404, detail="Kuryer topilmadi")
-
-    # DIQQAT: kuryerda tugallanmagan (yo'lda) buyurtmalari bo'lsa, uni o'chirish
-    # o'sha buyurtmalarni "egasiz" qoldiradi. Hozircha oddiy o'chirish qilyapmiz,
-    # lekin productionda avval faol buyurtmalari yo'qligini tekshirish tavsiya etiladi.
-    await db.delete(courier_user)
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ==================== 7. MIJOZLAR BOSHQARUVI ====================
-@clients_router.post("/{user_id}/toggle")
-async def toggle_client(user_id: int, db: AsyncSession = Depends(get_db)):
-    user_query = await db.execute(
-        select(User).where(User.id == user_id, User.role == UserRole.CLIENT)
-    )
-    client_user = user_query.scalars().first()
-    if not client_user:
-        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
-
-    client_user.is_active = not client_user.is_active
-    await db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# Barcha routerlarni ilovaga ulash
-app.include_router(admin_router)
-app.include_router(settings_router)
-app.include_router(orders_router)
-app.include_router(partners_router)
-app.include_router(products_router)
-app.include_router(couriers_router)
-app.include_router(clients_router)
+import enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text
+from sqlalchemy.orm import relationship
+from datetime import datetime
+from database import Base
+
+class UserRole(enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    PARTNER = "partner"
+    COURIER = "courier"
+    CLIENT = "client"
+
+class OrderStatus(enum.Enum):
+    CREATED = "created"
+    ACCEPTED_BY_PARTNER = "accepted_by_partner"
+    PREPARING = "preparing"
+    LOOKING_FOR_COURIER = "looking_for_courier"
+    ON_THE_WAY = "on_the_way"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+class WeatherCondition(enum.Enum):
+    CLEAR = "clear"
+    HOT = "hot"
+    COLD = "cold"
+    RAIN = "rain"
+    SNOW = "snow"
+    WINDY = "windy"
+
+class City(Base):
+    __tablename__ = "cities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)  # masalan: "Uchquduq", "Zarafshon"
+    is_active = Column(Boolean, default=True)
+
+    partners = relationship("PartnerProfile", back_populates="city")
+    operators = relationship("User", back_populates="city")
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(String, unique=True, index=True, nullable=True)
+    full_name = Column(String, nullable=False)
+    phone_number = Column(String, unique=True, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.CLIENT)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Faqat OWNER/ADMIN (operator) rollari uchun ishlatiladi — mijoz/kuryer/hamkorda bo'sh qoladi
+    password_hash = Column(String, nullable=True)
+
+    # Operator (ADMIN) uchun: qaysi shaharga biriktirilgan. OWNER uchun NULL — cheklovsiz.
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
+    city = relationship("City", back_populates="operators")
+
+    # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
+    # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
+    courier_profile = relationship("CourierProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    partner_profile = relationship("PartnerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+class CourierProfile(Base):
+    __tablename__ = "courier_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    passport_data = Column(String, nullable=True)
+    transport_type = Column(String, default="walking")
+    is_approved = Column(Boolean, default=False)
+    is_online = Column(Boolean, default=False)
+    balance = Column(Float, default=0.0)
+
+    user = relationship("User", back_populates="courier_profile")
+
+class PartnerProfile(Base):
+    __tablename__ = "partner_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
+    brand_name = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    address = Column(String, nullable=False)
+    is_open = Column(Boolean, default=True)
+    balance = Column(Float, default=0.0)
+
+    commission_rate = Column(Float, default=10.0)
+    opening_time = Column(String, default="09:00")
+    closing_time = Column(String, default="23:00")
+
+    user = relationship("User", back_populates="partner_profile")
+    city = relationship("City", back_populates="partners")
+    products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id"))
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    price = Column(Float, nullable=False)
+    is_available = Column(Boolean, default=True)
+
+    partner = relationship("PartnerProfile", back_populates="products")
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("users.id"))
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
+    courier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    status = Column(Enum(OrderStatus), default=OrderStatus.CREATED)
+    total_price = Column(Float, nullable=False)
+    delivery_fee = Column(Float, nullable=False)
+    delivery_address = Column(String, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    # product_id nullable=True: agar mahsulot keyinchalik o'chirilsa ham,
+    # buyurtma tarixi (order_item) saqlanib qoladi — faqat bog'lanish uziladi
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+
+    # DIQQAT: nom va narx shu yerda "suratga olinadi" (snapshot).
+    # Sabab: agar ertaga admin mahsulot narxini o'zgartirsa yoki nomini
+    # tahrirlasa, ESKI buyurtmalar o'sha vaqtdagi haqiqiy narx/nomni
+    # ko'rsatishi kerak — hozirgi narxni emas. Aks holda hisobotlar
+    # (masalan, "shu oy qancha sotildi") noto'g'ri chiqib qoladi.
+    product_name = Column(String, nullable=False)
+    unit_price = Column(Float, nullable=False)
+    quantity = Column(Integer, nullable=False, default=1)
+
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product")
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    base_delivery_fee = Column(Float, default=10000.0)
+    service_commission_percent = Column(Float, default=10.0)
+    weather_condition = Column(Enum(WeatherCondition), default=WeatherCondition.CLEAR)
+    weather_multiplier = Column(Float, default=1.0)
+    auto_weather_pricing = Column(Boolean, default=True)

@@ -28,6 +28,16 @@ class WeatherCondition(enum.Enum):
     SNOW = "snow"
     WINDY = "windy"
 
+class City(Base):
+    __tablename__ = "cities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)  # masalan: "Uchquduq", "Zarafshon"
+    is_active = Column(Boolean, default=True)
+
+    partners = relationship("PartnerProfile", back_populates="city")
+    operators = relationship("User", back_populates="city")
+
 class User(Base):
     __tablename__ = "users"
 
@@ -38,6 +48,13 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.CLIENT)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Faqat OWNER/ADMIN (operator) rollari uchun ishlatiladi — mijoz/kuryer/hamkorda bo'sh qoladi
+    password_hash = Column(String, nullable=True)
+
+    # Operator (ADMIN) uchun: qaysi shaharga biriktirilgan. OWNER uchun NULL — cheklovsiz.
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
+    city = relationship("City", back_populates="operators")
 
     # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
     # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
@@ -62,6 +79,7 @@ class PartnerProfile(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
     brand_name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     address = Column(String, nullable=False)
@@ -73,6 +91,7 @@ class PartnerProfile(Base):
     closing_time = Column(String, default="23:00")
 
     user = relationship("User", back_populates="partner_profile")
+    city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
 
 class Product(Base):

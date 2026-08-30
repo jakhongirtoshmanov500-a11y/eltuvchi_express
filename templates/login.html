@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kirish — Eltuvchi Express</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+        <div class="flex flex-col items-center mb-6">
+            <img src="/static/images/logo.png" alt="Eltuvchi Express" class="h-16 w-16 object-contain mb-2" onerror="this.style.display='none'">
+            <h1 class="text-xl font-bold text-indigo-700">Eltuvchi Express</h1>
+            <p class="text-xs text-gray-500 mt-1">Boshqaruv Paneliga Kirish</p>
+        </div>
+
+        {% if error %}
+        <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/login" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Telefon raqami</label>
+                <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" required autofocus>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Parol</label>
+                <input type="password" name="password" class="w-full mt-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" required>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-bold transition-colors">
+                Kirish
+            </button>
+        </form>
+    </div>
+
+</body>
+</html>
