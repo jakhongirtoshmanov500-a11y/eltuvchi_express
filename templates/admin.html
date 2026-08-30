@@ -81,6 +81,56 @@
 
         </div>
 
+        <!-- YANGI BUYURTMA YARATISH -->
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📞 Yangi Buyurtma Yaratish (qo'lda)</h2>
+            <p class="text-xs text-gray-500 mb-4">Mijoz telefon orqali qo'ng'iroq qilganda, buyurtmani shu yerdan qo'lda kiritasiz.</p>
+            <form id="create-order-form" action="/admin/orders/create" method="POST" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium">Mijoz ismi</label>
+                        <input type="text" name="client_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Mijoz telefoni</label>
+                        <input type="text" name="client_phone" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Yetkazish manzili</label>
+                        <input type="text" name="delivery_address" placeholder="Mustaqillik ko'chasi, 12-uy" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium mb-1">Do'kon</label>
+                    <select id="order-partner-select" name="partner_id" onchange="onPartnerChange()" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                        <option value="">Do'konni tanlang</option>
+                        {% for partner in partners %}
+                        <option value="{{ partner.id }}">{{ partner.brand_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-medium">Mahsulotlar</label>
+                        <button type="button" onclick="addOrderItemRow()" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">+ Mahsulot qo'shish</button>
+                    </div>
+                    <div id="order-items-container" class="space-y-2">
+                        <!-- JS orqali qatorlar shu yerga qo'shiladi -->
+                    </div>
+                    <p id="order-items-hint" class="text-xs text-gray-400 mt-1">Avval do'konni tanlang, keyin mahsulot qo'shing.</p>
+                </div>
+
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    <span class="text-sm font-semibold">Taxminiy summa: <span id="order-estimated-total">0</span> so'm</span>
+                    <span class="text-xs text-gray-500">+ yetkazish narxi (avtomatik hisoblanadi)</span>
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Buyurtmani Yaratish</button>
+            </form>
+        </div>
+
         <!-- ORDERS -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md">
             <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar Boshqaruvi</h2>
@@ -99,7 +149,9 @@
                     <tbody class="divide-y text-sm dark:divide-gray-700">
                         {% for order in orders %}
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td class="p-3 font-bold">#{{ order.id }}</td>
+                            <td class="p-3 font-bold">
+                                <button type="button" data-order-id="{{ order.id }}" onclick="toggleOrderDetails(this.dataset.orderId)" class="text-indigo-600">#{{ order.id }} 🔍</button>
+                            </td>
                             <td class="p-3">{{ order.delivery_address }}</td>
                             <td class="theme-text p-3 font-semibold text-indigo-600">{{ order.total_price }} so'm</td>
                             <td class="p-3 font-semibold">{{ order.delivery_fee }} so'm</td>
@@ -121,6 +173,20 @@
                                     </select>
                                     <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
                                 </form>
+                            </td>
+                        </tr>
+                        <tr id="order-details-{{ order.id }}" class="hidden bg-gray-50 dark:bg-gray-800/50">
+                            <td colspan="6" class="p-3">
+                                <p class="text-xs font-semibold mb-1">Buyurtma tarkibi:</p>
+                                {% if order.items %}
+                                <ul class="text-xs space-y-0.5">
+                                    {% for item in order.items %}
+                                    <li>• {{ item.product_name }} — {{ item.quantity }} x {{ item.unit_price }} so'm = {{ item.quantity * item.unit_price }} so'm</li>
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <p class="text-xs text-gray-400">Bu buyurtma uchun mahsulot tarkibi saqlanmagan (eski buyurtma).</p>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -456,7 +522,84 @@
         </div>
     </div>
 
+    <!-- Mahsulotlar ma'lumoti - JS kod ichida emas, alohida JSON blok sifatida.
+         Bu ham VS Code kabi muharrirlarni chalg'itmaydi, ham xavfsizroq usul. -->
+    <script type="application/json" id="products-data">{{ products_json | safe }}</script>
+
     <script>
+        // Barcha mavjud mahsulotlar (do'kon bo'yicha filtrlash uchun) — yuqoridagi JSON blokdan o'qiladi
+        const allProducts = JSON.parse(document.getElementById('products-data').textContent);
+        let orderItemRowCounter = 0;
+
+        function onPartnerChange() {
+            // Do'kon almashtirilganda, avval qo'shilgan qatorlarni tozalaymiz —
+            // chunki ular boshqa do'konning mahsulotlariga tegishli bo'lishi mumkin
+            document.getElementById('order-items-container').innerHTML = '';
+            orderItemRowCounter = 0;
+            updateOrderItemsHint();
+            calculateEstimatedTotal();
+        }
+
+        function updateOrderItemsHint() {
+            const partnerId = document.getElementById('order-partner-select').value;
+            const container = document.getElementById('order-items-container');
+            const hint = document.getElementById('order-items-hint');
+            hint.classList.toggle('hidden', !partnerId || container.children.length > 0);
+        }
+
+        function addOrderItemRow() {
+            const partnerId = document.getElementById('order-partner-select').value;
+            if (!partnerId) {
+                alert('Avval do\'konni tanlang');
+                return;
+            }
+            const partnerProducts = allProducts.filter(p => p.partner_id == partnerId);
+            if (partnerProducts.length === 0) {
+                alert('Bu do\'konda hozircha mavjud mahsulot yo\'q');
+                return;
+            }
+
+            orderItemRowCounter++;
+            const rowId = `order-item-row-${orderItemRowCounter}`;
+
+            const row = document.createElement('div');
+            row.id = rowId;
+            row.className = 'flex gap-2 items-center';
+
+            const options = partnerProducts.map(p => `<option value="${p.id}" data-price="${p.price}">${p.name} — ${p.price} so'm</option>`).join('');
+
+            row.innerHTML = `
+                <select name="product_ids" class="flex-1 p-2 border rounded-lg text-sm dark:bg-gray-800" onchange="calculateEstimatedTotal()">
+                    ${options}
+                </select>
+                <input type="number" name="quantities" value="1" min="1" class="w-16 p-2 border rounded-lg text-sm dark:bg-gray-800" onchange="calculateEstimatedTotal()">
+                <button type="button" onclick="document.getElementById('${rowId}').remove(); updateOrderItemsHint(); calculateEstimatedTotal();" class="text-red-600 text-xs font-bold px-1">✕</button>
+            `;
+
+            document.getElementById('order-items-container').appendChild(row);
+            updateOrderItemsHint();
+            calculateEstimatedTotal();
+        }
+
+        function calculateEstimatedTotal() {
+            let total = 0;
+            document.querySelectorAll('#order-items-container > div').forEach(row => {
+                const select = row.querySelector('select[name="product_ids"]');
+                const qtyInput = row.querySelector('input[name="quantities"]');
+                if (!select || !qtyInput) return;
+                const selectedOption = select.options[select.selectedIndex];
+                const price = selectedOption ? parseFloat(selectedOption.dataset.price) : 0;
+                const qty = parseInt(qtyInput.value) || 0;
+                total += price * qty;
+            });
+            document.getElementById('order-estimated-total').textContent = total.toLocaleString('ru-RU');
+        }
+
+        function toggleOrderDetails(orderId) {
+            const row = document.getElementById(`order-details-${orderId}`);
+            row.classList.toggle('hidden');
+        }
+
         function openEditPartnerModal(btn) {
             const id = btn.dataset.id;
             const name = btn.dataset.name;

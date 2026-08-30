@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import date
-from typing import Optional
+from typing import List, Optional
+import json
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,6 +18,7 @@ from models import (
     UserRole,
     Order,
     OrderStatus,
+    OrderItem,
     PartnerProfile,
     Product,
     SystemSetting,
@@ -106,9 +108,11 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     today_revenue_val = revenue_query.scalar() or 0.0
     today_revenue = f"{today_revenue_val:,.0f}".replace(",", " ")
 
-    # Barcha buyurtmalar
+    # Barcha buyurtmalar (tarkibi — items — bilan birga)
     all_orders_query = await db.execute(
-        select(Order).order_by(Order.created_at.desc())
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
     )
     orders = all_orders_query.scalars().all()
 
@@ -121,6 +125,26 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         select(Product).options(selectinload(Product.partner))
     )
     products = products_query.scalars().all()
+
+    # "Qo'lda buyurtma yaratish" formasi uchun — mahsulotlarni JS tomonida
+    # do'konga qarab guruhlab ko'rsatish maqsadida JSON qilib tayyorlaymiz
+    products_json = json.dumps([
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": p.price,
+            "partner_id": p.partner_id,
+            "partner_name": p.partner.brand_name if p.partner else "",
+        }
+        for p in products if p.is_available
+    ])
+
+    # Hozirgi ob-havoga mos tavsiya etilgan yetkazish narxi (admin buni forma ochilganda
+    # qo'lda o'zgartirishi ham mumkin — bu shunchaki boshlang'ich taklif)
+    if system_setting:
+        suggested_delivery_fee = system_setting.base_delivery_fee * system_setting.weather_multiplier
+    else:
+        suggested_delivery_fee = 10000.0
 
     return templates.TemplateResponse(
         request=request,
@@ -137,6 +161,8 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             "clients": clients,
             "partners": partners,
             "products": products,
+            "products_json": products_json,
+            "suggested_delivery_fee": suggested_delivery_fee,
             "weather_conditions": [w.value for w in WeatherCondition],
             "order_statuses": [s.value for s in OrderStatus],
         },
@@ -176,6 +202,88 @@ async def update_settings(
 
 
 # ==================== 3. BUYURTMALAR BOSHQARUVI ====================
+@orders_router.post("/create")
+async def create_order(
+    partner_id: int = Form(...),
+    client_name: str = Form(...),
+    client_phone: str = Form(...),
+    delivery_address: str = Form(...),
+    product_ids: List[int] = Form(...),
+    quantities: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if len(product_ids) != len(quantities) or len(product_ids) == 0:
+        raise HTTPException(status_code=400, detail="Mahsulotlar ro'yxati noto'g'ri")
+
+    # Mijozni telefon raqami bo'yicha topamiz, topilmasa yangi yaratamiz —
+    # chunki hozircha mijoz ilovasi yo'q, buyurtmalar admin/dispetcher orqali
+    # telefon qo'ng'irog'idan qo'lda kiritiladi.
+    client_query = await db.execute(select(User).where(User.phone_number == client_phone))
+    client = client_query.scalars().first()
+    if not client:
+        client = User(
+            full_name=client_name,
+            phone_number=client_phone,
+            role=UserRole.CLIENT,
+            is_active=True,
+        )
+        db.add(client)
+        await db.flush()
+
+    # DIQQAT: umumiy summani frontend'dan ishonib qabul qilmaymiz — buni har doim
+    # backend o'zi, bazadagi haqiqiy narxlar asosida hisoblaydi. Aks holda kimdir
+    # forma orqali xato/qasddan boshqa summa yuborishi mumkin edi.
+    total_price = 0.0
+    order_items_data = []
+    for product_id, qty in zip(product_ids, quantities):
+        if qty <= 0:
+            continue
+        prod_query = await db.execute(
+            select(Product).where(Product.id == product_id, Product.partner_id == partner_id)
+        )
+        product = prod_query.scalars().first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Mahsulot topilmadi (id={product_id})")
+
+        subtotal = product.price * qty
+        total_price += subtotal
+        order_items_data.append((product, qty))
+
+    if not order_items_data:
+        raise HTTPException(status_code=400, detail="Kamida bitta mahsulot tanlanishi kerak")
+
+    # Yetkazish narxi — hozirgi tizim sozlamasidan (ob-havo koeffitsiyenti bilan)
+    setting_query = await db.execute(select(SystemSetting))
+    setting = setting_query.scalars().first()
+    if setting:
+        delivery_fee = setting.base_delivery_fee * setting.weather_multiplier
+    else:
+        delivery_fee = 10000.0
+
+    new_order = Order(
+        client_id=client.id,
+        partner_id=partner_id,
+        status=OrderStatus.CREATED,
+        total_price=total_price,
+        delivery_fee=delivery_fee,
+        delivery_address=delivery_address,
+    )
+    db.add(new_order)
+    await db.flush()  # new_order.id ni olish uchun
+
+    for product, qty in order_items_data:
+        db.add(OrderItem(
+            order_id=new_order.id,
+            product_id=product.id,
+            product_name=product.name,  # narx/nom o'sha paytdagi holicha "suratga olinadi"
+            unit_price=product.price,
+            quantity=qty,
+        ))
+
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @orders_router.post("/{order_id}/update")
 async def update_order_status_and_courier(
     order_id: int,
