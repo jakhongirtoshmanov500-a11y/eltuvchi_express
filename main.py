@@ -175,6 +175,7 @@ async def update_settings(
     base_fee: float = Form(...),
     weather_condition: str = Form(...),
     weather_multiplier: float = Form(...),
+    service_commission_percent: float = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -190,12 +191,14 @@ async def update_settings(
             base_delivery_fee=base_fee,
             weather_condition=weather_enum,
             weather_multiplier=weather_multiplier,
+            service_commission_percent=service_commission_percent,
         )
         db.add(setting)
     else:
         setting.base_delivery_fee = base_fee
         setting.weather_condition = weather_enum
         setting.weather_multiplier = weather_multiplier
+        setting.service_commission_percent = service_commission_percent
 
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)

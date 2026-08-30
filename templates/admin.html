@@ -41,6 +41,11 @@
                         <input type="number" name="base_fee" value="{{ system_setting.base_delivery_fee if system_setting else 10000 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
                     </div>
                     <div>
+                        <label class="block text-sm font-medium">Standart Komissiya Foizi (%)</label>
+                        <input type="number" step="0.1" name="service_commission_percent" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
+                        <p class="text-[11px] text-gray-500 mt-1">Yangi do'kon qo'shilganda shu foiz taklif etiladi; har bir do'kon uchun alohida o'zgartirish ham mumkin.</p>
+                    </div>
+                    <div>
                         <label class="block text-sm font-medium">Ob-havo Sharoiti</label>
                         <select id="weather-select" name="weather_condition" onchange="applyWeatherMultiplier()" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700">
                             {% for w in weather_conditions %}
