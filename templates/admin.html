@@ -455,6 +455,86 @@
         </div>
         {% endif %}
 
+        {% if is_owner %}
+        <!-- MOLIYAVIY BOSHQARUV (faqat OWNER) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Kuryer Balansi</h2>
+                <form action="/admin/finance/courier" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Kuryer</label>
+                        <select name="user_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <option value="">Kuryerni tanlang</option>
+                            {% for c in all_couriers %}
+                            <option value="{{ c.id }}">{{ c.full_name }} ({{ "%.0f"|format(c.courier_profile.balance) if c.courier_profile else 0 }} so'm)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Summa (so'm)</label>
+                        <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Izoh</label>
+                        <input type="text" name="note" placeholder="Masalan: haftalik hisob-kitob" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
+                        <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Hamkor Balansi</h2>
+                <form action="/admin/finance/partner" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Do'kon</label>
+                        <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                            <option value="">Do'konni tanlang</option>
+                            {% for p in partners %}
+                            <option value="{{ p.id }}">{{ p.brand_name }} ({{ "%.0f"|format(p.balance) }} so'm)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Summa (so'm)</label>
+                        <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Izoh</label>
+                        <input type="text" name="note" placeholder="Masalan: oylik hisob-kitob" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
+                        <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📜 Tranzaksiyalar Tarixi</h2>
+                <div class="overflow-y-auto max-h-80 space-y-2">
+                    {% for tx in recent_transactions %}
+                    <div class="text-xs border-b pb-2 dark:border-gray-700">
+                        <div class="flex justify-between">
+                            <span class="font-semibold">
+                                {% if tx.user %}🛵 {{ tx.user.full_name }}{% elif tx.partner %}🏪 {{ tx.partner.brand_name }}{% else %}—{% endif %}
+                            </span>
+                            <span class="font-bold {% if tx.type.value == 'deposit' %}text-green-600{% else %}text-red-600{% endif %}">
+                                {% if tx.type.value == 'deposit' %}+{% else %}−{% endif %}{{ "%.0f"|format(tx.amount) }}
+                            </span>
+                        </div>
+                        <p class="text-gray-400">{{ tx.note or '—' }} · {{ tx.created_by.full_name if tx.created_by else '—' }} · {{ tx.created_at.strftime('%d.%m %H:%M') }}</p>
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-gray-400 text-center">Hozircha tranzaksiya yo'q</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- PARTNERS & PRODUCTS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -568,7 +648,7 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <p class="text-[11px] text-gray-500">📍 {{ partner.address }} {% if partner.city %}| 🏙️ {{ partner.city.name }}{% endif %} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }} | 🏷️ {{ partner.commission_rate }}%</p>
+                        <p class="text-[11px] text-gray-500">📍 {{ partner.address }} {% if partner.city %}| 🏙️ {{ partner.city.name }}{% endif %} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }} | 🏷️ {{ partner.commission_rate }}%{% if is_owner %} | 💰 {{ "%.0f"|format(partner.balance) }} so'm{% endif %}</p>
                         
                         <div class="divide-y dark:divide-gray-700 border-t dark:border-gray-700 pt-2 mt-2">
                             {% for product in products %}

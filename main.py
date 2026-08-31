@@ -26,6 +26,8 @@ from models import (
     WeatherCondition,
     CourierProfile,
     City,
+    Transaction,
+    TransactionType,
 )
 from auth import (
     hash_password,
@@ -164,6 +166,9 @@ clients_router = APIRouter(
 )
 operators_router = APIRouter(
     prefix="/admin/operators", tags=["Operatorlar Boshqaruvi"], dependencies=[Depends(require_owner)]
+)
+finance_router = APIRouter(
+    prefix="/admin/finance", tags=["Moliyaviy Boshqaruv"], dependencies=[Depends(require_owner)]
 )
 
 
@@ -333,6 +338,21 @@ async def admin_dashboard(
         ]
     )
 
+    # ---- TRANZAKSIYALAR TARIXI (faqat OWNER, oxirgi 50 ta) ----
+    recent_transactions = []
+    if is_owner:
+        tx_query = await db.execute(
+            select(Transaction)
+            .options(
+                selectinload(Transaction.user),
+                selectinload(Transaction.partner),
+                selectinload(Transaction.created_by),
+            )
+            .order_by(Transaction.created_at.desc())
+            .limit(50)
+        )
+        recent_transactions = tx_query.scalars().all()
+
     return templates.TemplateResponse(
         request=request,
         name="admin.html",
@@ -359,6 +379,7 @@ async def admin_dashboard(
             "order_statuses": [s.value for s in OrderStatus],
             "status_labels": STATUS_LABELS_UZ,
             "next_status_map": NEXT_STATUS_MAP,
+            "recent_transactions": recent_transactions,
         },
     )
 
@@ -828,6 +849,85 @@ async def delete_operator(user_id: int, db: AsyncSession = Depends(get_db)):
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ==================== 8. MOLIYAVIY BOSHQARUV (faqat OWNER) ====================
+@finance_router.post("/courier")
+async def update_courier_balance(
+    user_id: int = Form(...),
+    action: str = Form(...),  # "deposit" yoki "withdraw"
+    amount: float = Form(...),
+    note: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Summa musbat bo'lishi kerak")
+
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id, User.role == UserRole.COURIER)
+        .options(selectinload(User.courier_profile))
+    )
+    courier = result.scalars().first()
+    if not courier or not courier.courier_profile:
+        raise HTTPException(status_code=404, detail="Kuryer topilmadi")
+
+    if action == "deposit":
+        courier.courier_profile.balance += amount
+        tx_type = TransactionType.DEPOSIT
+    elif action == "withdraw":
+        courier.courier_profile.balance -= amount
+        tx_type = TransactionType.WITHDRAWAL
+    else:
+        raise HTTPException(status_code=400, detail="Noto'g'ri amal turi")
+
+    db.add(Transaction(
+        user_id=courier.id,
+        type=tx_type,
+        amount=amount,
+        note=note,
+        created_by_id=current_user.id,
+    ))
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@finance_router.post("/partner")
+async def update_partner_balance(
+    partner_id: int = Form(...),
+    action: str = Form(...),
+    amount: float = Form(...),
+    note: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Summa musbat bo'lishi kerak")
+
+    result = await db.execute(select(PartnerProfile).where(PartnerProfile.id == partner_id))
+    partner = result.scalars().first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Do'kon topilmadi")
+
+    if action == "deposit":
+        partner.balance += amount
+        tx_type = TransactionType.DEPOSIT
+    elif action == "withdraw":
+        partner.balance -= amount
+        tx_type = TransactionType.WITHDRAWAL
+    else:
+        raise HTTPException(status_code=400, detail="Noto'g'ri amal turi")
+
+    db.add(Transaction(
+        partner_id=partner.id,
+        type=tx_type,
+        amount=amount,
+        note=note,
+        created_by_id=current_user.id,
+    ))
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # Barcha routerlarni ilovaga ulash
 app.include_router(admin_router)
 app.include_router(settings_router)
@@ -837,3 +937,4 @@ app.include_router(products_router)
 app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
+app.include_router(finance_router)
