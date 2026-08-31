@@ -353,6 +353,66 @@ async def admin_dashboard(
         )
         recent_transactions = tx_query.scalars().all()
 
+    # ---- ANALITIKA (faqat OWNER) ----
+    # DIQQAT: komissiya foizi har bir do'kon uchun boshqacha bo'lishi mumkin
+    # (partner.commission_rate), shuning uchun buni SQL darajasida bitta
+    # formula bilan hisoblab bo'lmaydi — har bir buyurtmani alohida ko'rib,
+    # o'sha buyurtmaning o'z hamkoriga tegishli foizi bilan hisoblaymiz.
+    analytics = None
+    if is_owner:
+        month_start = today.replace(day=1)
+        courier_pct = (system_setting.courier_share_percent if system_setting else 80.0) / 100
+        default_commission_pct = (system_setting.service_commission_percent if system_setting else 10.0) / 100
+
+        async def compute_period_stats(period_start):
+            stmt = (
+                select(Order)
+                .options(selectinload(Order.partner))
+                .where(Order.status == OrderStatus.DELIVERED, func.date(Order.created_at) >= period_start)
+            )
+            if active_city_id is not None:
+                stmt = stmt.join(PartnerProfile, Order.partner_id == PartnerProfile.id).where(
+                    PartnerProfile.city_id == active_city_id
+                )
+            delivered = (await db.execute(stmt)).scalars().all()
+
+            courier_pay = partner_pay = commission_income = delivery_income = 0.0
+            for o in delivered:
+                rate = (o.partner.commission_rate / 100) if o.partner else default_commission_pct
+                commission = o.total_price * rate
+                partner_pay += o.total_price - commission
+                commission_income += commission
+                c_pay = o.delivery_fee * courier_pct
+                courier_pay += c_pay
+                delivery_income += o.delivery_fee - c_pay
+
+            return {
+                "order_count": len(delivered),
+                "courier_pay": courier_pay,
+                "partner_pay": partner_pay,
+                "commission_income": commission_income,
+                "delivery_income": delivery_income,
+                "net_profit": commission_income + delivery_income,
+            }
+
+        async def compute_loss_stats(period_start):
+            stmt = select(
+                func.count(Order.id), func.coalesce(func.sum(Order.total_price + Order.delivery_fee), 0)
+            ).where(Order.status == OrderStatus.CANCELLED, func.date(Order.created_at) >= period_start)
+            if active_city_id is not None:
+                stmt = stmt.join(PartnerProfile, Order.partner_id == PartnerProfile.id).where(
+                    PartnerProfile.city_id == active_city_id
+                )
+            count, total = (await db.execute(stmt)).first()
+            return {"count": count or 0, "amount": total or 0.0}
+
+        analytics = {
+            "today": await compute_period_stats(today),
+            "month": await compute_period_stats(month_start),
+            "today_loss": await compute_loss_stats(today),
+            "month_loss": await compute_loss_stats(month_start),
+        }
+
     return templates.TemplateResponse(
         request=request,
         name="admin.html",
@@ -380,6 +440,7 @@ async def admin_dashboard(
             "status_labels": STATUS_LABELS_UZ,
             "next_status_map": NEXT_STATUS_MAP,
             "recent_transactions": recent_transactions,
+            "analytics": analytics,
         },
     )
 

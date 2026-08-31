@@ -106,6 +106,37 @@
 
         </div>
 
+        {% if is_owner and analytics %}
+        <!-- ANALITIKA (faqat OWNER) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📈 Bugungi Moliyaviy Hisobot</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.today.order_count }} ta</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.courier_pay) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.partner_pay) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.commission_income) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.delivery_income) }} so'm</span></div>
+                    <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Bugungi sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.today.net_profit) }} so'm</span></div>
+                    <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.today_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.today_loss.amount) }} so'm</span></div>
+                </div>
+            </div>
+
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📅 Shu Oylik Moliyaviy Hisobot</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.month.order_count }} ta</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.courier_pay) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.partner_pay) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.commission_income) }} so'm</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.delivery_income) }} so'm</span></div>
+                    <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Oylik sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.month.net_profit) }} so'm</span></div>
+                    <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.month_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.month_loss.amount) }} so'm</span></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- YANGI BUYURTMA YARATISH -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md">
             <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📞 Yangi Buyurtma Yaratish (qo'lda)</h2>
