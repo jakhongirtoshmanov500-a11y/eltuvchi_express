@@ -95,23 +95,19 @@ async def seed_default_data():
 
 # ==================== STARTUP / SHUTDOWN ====================
 @asynccontextmanager
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
+        # DIQQAT: bazaning sxemasini (jadval/ustunlar) boshqarish endi Alembic
+        # zimmasida (qarang: alembic/, va Render'dagi Start Command).
+        # create_all bu yerda faqat BIRINCHI marta, hali umuman bo'sh bazaga
+        # ishga tushirilganda foydali — u YANGI jadvallarni yaratadi, lekin
+        # mavjud jadvalga yangi ustun qo'sha olmaydi. Shu sababli, modelga
+        # o'zgartirish kiritilganda, endi HAR DOIM Alembic migratsiyasi
+        # yozilishi va ishga tushirilishi kerak (README'dagi yo'riqnomaga qarang).
         await conn.run_sync(Base.metadata.create_all)
 
-        # DIQQAT: create_all faqat BAZADA UMUMAN YO'Q jadvallarni yaratadi.
-        # Agar jadval (masalan "users") allaqachon mavjud bo'lsa-yu, modelga
-        # keyinchalik yangi ustun (masalan password_hash) qo'shilgan bo'lsa,
-        # create_all buni bazaga qo'shmaydi — natijada "column does not exist"
-        # xatoligi chiqadi. Shuning uchun har safar ishga tushganda, eski
-        # jadvallarga yetishmayotgan ustunlarni o'zimiz "bor bo'lsa hech narsa
-        # qilma, yo'q bo'lsa qo'sh" tarzida qo'shib qo'yamiz — bu xavfsiz va
-        # bir necha marta ishga tushirilsa ham hech qanday zarar keltirmaydi.
-        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR"))
-        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS city_id INTEGER REFERENCES cities(id)"))
-        await conn.execute(text("ALTER TABLE partner_profiles ADD COLUMN IF NOT EXISTS city_id INTEGER REFERENCES cities(id)"))
-
-    print("PostgreSQL jadvallari muvaffaqiyatli yaratildi/yangilandi!")
+    print("PostgreSQL jadvallari tayyor (sxema Alembic orqali boshqariladi).")
     await seed_default_data()
     yield
 

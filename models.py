@@ -155,3 +155,32 @@ class SystemSetting(Base):
     weather_condition = Column(Enum(WeatherCondition), default=WeatherCondition.CLEAR)
     weather_multiplier = Column(Float, default=1.0)
     auto_weather_pricing = Column(Boolean, default=True)
+
+
+class TransactionType(enum.Enum):
+    DEPOSIT = "deposit"      # balansga pul qo'shish (masalan, naqd pulni "hisobga olish")
+    WITHDRAWAL = "withdrawal"  # balansdan pul yechish (masalan, kuryerga naqd to'lab, balansdan ayirish)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Tranzaksiya yoki kuryerga (user_id), yoki hamkorga (partner_id) tegishli bo'ladi —
+    # ikkalasi bir vaqtda to'lmaydi, faqat bittasi ishlatiladi.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
+
+    type = Column(Enum(TransactionType), nullable=False)
+    amount = Column(Float, nullable=False)
+    note = Column(String, nullable=True)
+
+    # Kim amalga oshirganini bilish uchun (hisobot va shaffoflik uchun muhim —
+    # kim, qachon, kimning balansiga qo'l tekkizganini keyin tekshirish mumkin bo'lishi kerak)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+    partner = relationship("PartnerProfile", foreign_keys=[partner_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
