@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
+from auth import RedirectToLogin
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -1038,3 +1039,7 @@ app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
 app.include_router(finance_router)
+# ==================== SESSIYASIZ URNILGANDA LOGIN'GA YUBORISH ====================
+@app.exception_handler(RedirectToLogin)
+async def redirect_to_login_handler(request: Request, exc: RedirectToLogin):
+    return RedirectResponse(url="/login", status_code=303)
