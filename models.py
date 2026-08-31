@@ -74,6 +74,7 @@ class CourierProfile(Base):
 
     user = relationship("User", back_populates="courier_profile")
 
+
 class PartnerProfile(Base):
     __tablename__ = "partner_profiles"
 
@@ -93,6 +94,8 @@ class PartnerProfile(Base):
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="partner")
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -105,6 +108,7 @@ class Product(Base):
     is_available = Column(Boolean, default=True)
 
     partner = relationship("PartnerProfile", back_populates="products")
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -121,9 +125,8 @@ class Order(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
+    partner = relationship("PartnerProfile", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-
 
 class OrderItem(Base):
     __tablename__ = "order_items"
