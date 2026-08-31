@@ -262,6 +262,9 @@ async def admin_dashboard(
     all_couriers = all_couriers_query.scalars().all()
 
     # ---- MIJOZLAR ----
+    # DIQQAT: mijozlar hozircha shahar bo'yicha filtrlanmaydi (mijozda o'zining
+    # shahar maydoni yo'q). Bu — bilib turilgan cheklov, keyinroq (mijoz
+    # buyurtma qilgan do'konlar orqali) aniqlashtirilishi mumkin.
     clients_query = await db.execute(
         select(
             User,
@@ -351,6 +354,10 @@ async def admin_dashboard(
         recent_transactions = tx_query.scalars().all()
 
     # ---- ANALITIKA (faqat OWNER) ----
+    # DIQQAT: komissiya foizi har bir do'kon uchun boshqacha bo'lishi mumkin
+    # (partner.commission_rate), shuning uchun buni SQL darajasida bitta
+    # formula bilan hisoblab bo'lmaydi — har bir buyurtmani alohida ko'rib,
+    # o'sha buyurtmaning o'z hamkoriga tegishli foizi bilan hisoblaymiz.
     analytics = None
     if is_owner:
         month_start = today.replace(day=1)
@@ -579,6 +586,8 @@ async def update_order_status_and_courier(
 
 
 # ==================== 4. DO'KONLAR BOSHQARUVI ====================
+# DIQQAT: create/update/delete — faqat OWNER (require_owner qo'shimcha tekshiruvi bilan).
+# toggle — operator ham qila oladi (router darajasidagi get_current_admin_user yetarli).
 @partners_router.post("/create")
 async def create_partner(
     brand_name: str = Form(...),
@@ -717,6 +726,8 @@ async def update_product(
 
 @products_router.post("/{product_id}/toggle")
 async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
+    # DIQQAT: toggle (mavjud/tugadi belgilash) — operator ham qila oladi,
+    # chunki bu kunlik operatsion ish (masalan "bugun tovuq tugadi").
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
     if not product:
@@ -753,6 +764,7 @@ async def create_courier(
     if existing_query.scalars().first():
         raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon ro'yxatdan o'tgan")
 
+    # Operator faqat o'z shahriga kuryer qo'sha oladi — city_id majburan o'ziniki bo'ladi
     resolved_city_id = city_id if current_user.role == UserRole.OWNER else current_user.city_id
 
     new_user = User(
@@ -809,6 +821,7 @@ async def update_courier(
     if courier_user.courier_profile:
         courier_user.courier_profile.transport_type = transport_type
 
+    # Faqat OWNER kuryerni boshqa shaharga o'tkaza oladi
     if current_user.role == UserRole.OWNER and city_id is not None:
         courier_user.city_id = city_id
 
@@ -989,12 +1002,20 @@ async def reset_system(
     db: AsyncSession = Depends(get_db),
     owner: User = Depends(require_owner),
 ):
+    # Ikki bosqichli himoya: JS'da tasdiqlash oynasi + bu yerda aniq matn
+    # ("TOZALASH") kiritilishi shart. Bu — qaytarib bo'lmaydigan amal bo'lgani
+    # uchun, tasodifan bosilib ketishning oldini olish uchun ataylab qattiq
+    # qilingan.
     if confirmation != "TOZALASH":
         raise HTTPException(
             status_code=400,
             detail="Tasdiqlash matni noto'g'ri. Aniq katta harflarda 'TOZALASH' deb yozing.",
         )
 
+    # DIQQAT: bu yerda ataylab FK (bog'liqlik) tartibiga rioya qilingan —
+    # avval "farzand" jadvallar, keyin "ota" jadvallar o'chiriladi.
+    # OWNER va operatorlar (ADMIN roli), shaharlar va tizim sozlamalari
+    # HECH QACHON bu bilan o'chirilmaydi — aks holda tizimga kirolmay qolasiz.
     await db.execute(text("DELETE FROM order_items"))
     await db.execute(text("DELETE FROM orders"))
     await db.execute(text("DELETE FROM transactions"))
