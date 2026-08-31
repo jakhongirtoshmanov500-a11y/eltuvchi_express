@@ -156,6 +156,10 @@ class SystemSetting(Base):
     weather_multiplier = Column(Float, default=1.0)
     auto_weather_pricing = Column(Boolean, default=True)
 
+    # Yetkazish narxining necha foizi kuryerga tegishli ekani (qolgani egasiga qoladi).
+    # Masalan 80.0 = yetkazish narxining 80%i kuryerga, 20%i egasiga.
+    courier_share_percent = Column(Float, default=80.0)
+
 
 class TransactionType(enum.Enum):
     DEPOSIT = "deposit"      # balansga pul qo'shish (masalan, naqd pulni "hisobga olish")

@@ -391,12 +391,16 @@ async def update_settings(
     weather_condition: str = Form(...),
     weather_multiplier: float = Form(...),
     service_commission_percent: float = Form(...),
+    courier_share_percent: float = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     try:
         weather_enum = WeatherCondition(weather_condition)
     except ValueError:
         raise HTTPException(status_code=400, detail="Noto'g'ri ob-havo qiymati")
+
+    if not (0 <= courier_share_percent <= 100):
+        raise HTTPException(status_code=400, detail="Kuryer ulushi 0-100 oralig'ida bo'lishi kerak")
 
     setting_query = await db.execute(select(SystemSetting))
     setting = setting_query.scalars().first()
@@ -407,6 +411,7 @@ async def update_settings(
             weather_condition=weather_enum,
             weather_multiplier=weather_multiplier,
             service_commission_percent=service_commission_percent,
+            courier_share_percent=courier_share_percent,
         )
         db.add(setting)
     else:
@@ -414,6 +419,7 @@ async def update_settings(
         setting.weather_condition = weather_enum
         setting.weather_multiplier = weather_multiplier
         setting.service_commission_percent = service_commission_percent
+        setting.courier_share_percent = courier_share_percent
 
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
@@ -925,6 +931,39 @@ async def update_partner_balance(
         created_by_id=current_user.id,
     ))
     await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ==================== 9. TIZIMNI TOZALASH — RESET (faqat OWNER) ====================
+@app.post("/admin/reset")
+async def reset_system(
+    confirmation: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    owner: User = Depends(require_owner),
+):
+    # Ikki bosqichli himoya: JS'da tasdiqlash oynasi + bu yerda aniq matn
+    # ("TOZALASH") kiritilishi shart. Bu — qaytarib bo'lmaydigan amal bo'lgani
+    # uchun, tasodifan bosilib ketishning oldini olish uchun ataylab qattiq
+    # qilingan.
+    if confirmation != "TOZALASH":
+        raise HTTPException(
+            status_code=400,
+            detail="Tasdiqlash matni noto'g'ri. Aniq katta harflarda 'TOZALASH' deb yozing.",
+        )
+
+    # DIQQAT: bu yerda ataylab FK (bog'liqlik) tartibiga rioya qilingan —
+    # avval "farzand" jadvallar, keyin "ota" jadvallar o'chiriladi.
+    # OWNER va operatorlar (ADMIN roli), shaharlar va tizim sozlamalari
+    # HECH QACHON bu bilan o'chirilmaydi — aks holda tizimga kirolmay qolasiz.
+    await db.execute(text("DELETE FROM order_items"))
+    await db.execute(text("DELETE FROM orders"))
+    await db.execute(text("DELETE FROM transactions"))
+    await db.execute(text("DELETE FROM products"))
+    await db.execute(text("DELETE FROM partner_profiles"))
+    await db.execute(text("DELETE FROM courier_profiles"))
+    await db.execute(text("DELETE FROM users WHERE role IN ('client', 'courier')"))
+    await db.commit()
+
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
