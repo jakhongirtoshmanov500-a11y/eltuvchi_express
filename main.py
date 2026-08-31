@@ -97,6 +97,7 @@ async def seed_default_data():
 
 # ==================== STARTUP / SHUTDOWN ====================
 @asynccontextmanager
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         # DIQQAT: bazaning sxemasini (jadval/ustunlar) boshqarish endi Alembic

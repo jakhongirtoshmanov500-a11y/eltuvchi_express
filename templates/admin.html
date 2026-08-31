@@ -815,30 +815,18 @@
         </div>
     </div>
 
-    <!-- Mahsulotlar ma'lumoti - JS kod ichida emas, alohida JSON blok sifatida. -->
+    <!-- Mahsulotlar ma'lumoti - JS kod ichida emas, alohida JSON blok sifatida.
+         Bu ham VS Code kabi muharrirlarni chalg'itmaydi, ham xavfsizroq usul. -->
     <script type="application/json" id="products-data">{{ products_json | safe }}</script>
 
     <script>
-        const weatherMultipliers = {
-            'clear': 1.0,
-            'rain': 1.3,
-            'snow': 1.5,
-            'heavy_rain': 1.8
-        };
-
-        function applyWeatherMultiplier() {
-            const select = document.getElementById('weather-select');
-            const input = document.getElementById('weather-multiplier-input');
-            if (select && input) {
-                const val = select.value;
-                input.value = weatherMultipliers[val] || 1.0;
-            }
-        }
-
+        // Barcha mavjud mahsulotlar (do'kon bo'yicha filtrlash uchun) — yuqoridagi JSON blokdan o'qiladi
         const allProducts = JSON.parse(document.getElementById('products-data').textContent);
         let orderItemRowCounter = 0;
 
         function onPartnerChange() {
+            // Do'kon almashtirilganda, avval qo'shilgan qatorlarni tozalaymiz —
+            // chunki ular boshqa do'konning mahsulotlariga tegishli bo'lishi mumkin
             document.getElementById('order-items-container').innerHTML = '';
             orderItemRowCounter = 0;
             updateOrderItemsHint();
@@ -905,12 +893,6 @@
             row.classList.toggle('hidden');
         }
 
-        function closeModals() {
-            document.getElementById('edit-partner-modal').classList.add('hidden');
-            document.getElementById('edit-product-modal').classList.add('hidden');
-            document.getElementById('edit-courier-modal').classList.add('hidden');
-        }
-
         function openEditPartnerModal(btn) {
             const id = btn.dataset.id;
             const name = btn.dataset.name;
@@ -924,14 +906,11 @@
             document.getElementById('edit-partner-form').action = `/admin/partners/${id}/update`;
             document.getElementById('edit-partner-name').value = name;
             document.getElementById('edit-partner-category').value = category;
+            document.getElementById('edit-partner-city').value = cityId;
             document.getElementById('edit-partner-address').value = address;
             document.getElementById('edit-partner-commission').value = commission;
             document.getElementById('edit-partner-open').value = open;
             document.getElementById('edit-partner-close').value = close;
-
-            const citySelect = document.getElementById('edit-partner-city');
-            if (citySelect && cityId) citySelect.value = cityId;
-
             document.getElementById('edit-partner-modal').classList.remove('hidden');
         }
 
@@ -945,7 +924,6 @@
             document.getElementById('edit-product-name').value = name;
             document.getElementById('edit-product-price').value = price;
             document.getElementById('edit-product-desc').value = desc;
-
             document.getElementById('edit-product-modal').classList.remove('hidden');
         }
 
@@ -960,31 +938,80 @@
             document.getElementById('edit-courier-name').value = name;
             document.getElementById('edit-courier-phone').value = phone;
             document.getElementById('edit-courier-transport').value = transport;
-
-            const citySelect = document.getElementById('edit-courier-city');
-            if (citySelect && cityId) citySelect.value = cityId;
-
+            // Shahar select faqat OWNER uchun renderlanadi, shuning uchun mavjudligini tekshiramiz
+            const cityEl = document.getElementById('edit-courier-city');
+            if (cityEl) cityEl.value = cityId;
             document.getElementById('edit-courier-modal').classList.remove('hidden');
         }
 
-        function setTheme(theme) {
+        function closeModals() {
+            document.getElementById('edit-partner-modal').classList.add('hidden');
+            document.getElementById('edit-product-modal').classList.add('hidden');
+            document.getElementById('edit-courier-modal').classList.add('hidden');
+        }
+
+        // Ob-havo sharoitiga qarab yetkazish narxi necha barobar oshishi.
+        // Bu — boshlang'ich taklif, real buyurtmalar tajribasiga qarab keyin o'zgartirilishi mumkin:
+        // - clear (oddiy kun): koeffitsiyent oshmaydi, chunki kuryer uchun qo'shimcha qiyinchilik yo'q
+        // - hot/cold (issiq/sovuq): kuryer uchun jismoniy og'irroq, +50%
+        // - windy (shamolli): ayniqsa velosiped/skuterga xalaqit beradi, +30%
+        // - rain (yomg'ir): harakat sekinlashadi, kiyim-jihoz kerak, +80%
+        // - snow (qor): eng og'ir va xavfli sharoit, +100%
+        const weatherMultipliers = {
+            clear: 1.0,
+            hot: 1.5,
+            cold: 1.5,
+            windy: 1.3,
+            rain: 1.8,
+            snow: 2.0
+        };
+
+        function applyWeatherMultiplier() {
+            const select = document.getElementById('weather-select');
+            const input = document.getElementById('weather-multiplier-input');
+            const selected = select.value;
+            input.value = (weatherMultipliers[selected] !== undefined ? weatherMultipliers[selected] : 1.0).toFixed(1);
+        }
+
+        const themes = {
+            indigo: { header: 'bg-indigo-700', text: 'text-indigo-700', btn: 'bg-indigo-600 hover:bg-indigo-700' },
+            emerald: { header: 'bg-emerald-700', text: 'text-emerald-700', btn: 'bg-emerald-600 hover:bg-emerald-700' },
+            sky: { header: 'bg-sky-700', text: 'text-sky-700', btn: 'bg-sky-600 hover:bg-sky-700' },
+            dark: { header: 'bg-gray-900', text: 'text-indigo-400', btn: 'bg-indigo-600 hover:bg-indigo-500' }
+        };
+
+        function setTheme(themeName) {
             const body = document.getElementById('app-body');
             const header = document.getElementById('main-header');
-            
-            body.classList.remove('dark');
-            header.className = header.className.replace(/bg-\w+-\d+/, '');
+            const titles = document.querySelectorAll('.theme-title');
+            const buttons = document.querySelectorAll('.theme-btn');
+            const themeTexts = document.querySelectorAll('.theme-text');
+            const statNumbers = document.querySelectorAll('.theme-stat-number');
+            const cards = document.querySelectorAll('.card-bg');
 
-            if (theme === 'dark') {
-                body.classList.add('dark');
-                header.classList.add('bg-gray-900');
-            } else if (theme === 'emerald') {
-                header.classList.add('bg-emerald-700');
-            } else if (theme === 'sky') {
-                header.classList.add('bg-sky-700');
+            if (themeName === 'dark') {
+                body.classList.add('dark', 'bg-gray-950', 'text-gray-100');
+                body.classList.remove('bg-gray-100', 'text-gray-800');
+                cards.forEach(card => card.classList.add('dark:bg-gray-900', 'dark:text-white'));
             } else {
-                header.classList.add('bg-indigo-700');
+                body.classList.remove('dark', 'bg-gray-950', 'text-gray-100');
+                body.classList.add('bg-gray-100', 'text-gray-800');
             }
+
+            header.className = `${themes[themeName].header} text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300`;
+            titles.forEach(t => t.className = `theme-title text-lg font-bold mb-4 ${themes[themeName].text} transition-colors duration-300`);
+            themeTexts.forEach(t => t.className = `theme-text p-3 font-semibold ${themes[themeName].text}`);
+            statNumbers.forEach(t => t.className = `theme-stat-number text-3xl font-extrabold mt-1 ${themes[themeName].text}`);
+            buttons.forEach(b => b.className = `theme-btn ${themes[themeName].btn} text-white py-2 rounded-lg font-bold transition`);
+
+            localStorage.setItem('admin_theme', themeName);
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
+            setTheme(savedTheme);
+            applyWeatherMultiplier();
+        });
     </script>
 </body>
 </html>
