@@ -8,6 +8,24 @@
     <script>
         tailwind.config = { darkMode: 'class' }
     </script>
+    <style>
+        .nav-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            transition: background-color 0.15s;
+        }
+        .nav-btn:hover { background-color: #eef2ff; }
+        .nav-btn.active { background-color: #4f46e5; color: white; }
+        html.dark .nav-btn { color: #d1d5db; }
+        html.dark .nav-btn:hover { background-color: #1f2937; }
+        html.dark .nav-btn.active { background-color: #4f46e5; color: white; }
+    </style>
 </head>
 <body id="app-body" class="bg-gray-100 text-gray-800 transition-colors duration-300">
 
@@ -41,8 +59,45 @@
         </div>
     </header>
 
-    <div class="container mx-auto mt-6 p-4 space-y-6">
+    <div class="flex min-h-screen">
+        <aside class="w-60 bg-white dark:bg-gray-900 border-r dark:border-gray-700 shrink-0 py-4 hidden md:block">
+            <nav class="flex flex-col gap-1 px-3">
+                <button onclick="showPage('bosh')" data-page-btn="bosh" class="nav-btn">🏠 Bosh sahifa</button>
+                <button onclick="showPage('buyurtmalar')" data-page-btn="buyurtmalar" class="nav-btn">📦 Buyurtmalar</button>
+                <button onclick="showPage('kuryerlar')" data-page-btn="kuryerlar" class="nav-btn">🛵 Kuryerlar</button>
+                <button onclick="showPage('mijozlar')" data-page-btn="mijozlar" class="nav-btn">👥 Mijozlar</button>
+                <button onclick="showPage('tugilgankun')" data-page-btn="tugilgankun" class="nav-btn">🎂 Tug'ilgan kunlar</button>
+                <button onclick="showPage('referal')" data-page-btn="referal" class="nav-btn">🎁 Referal</button>
+                <button onclick="showPage('bonuscashback')" data-page-btn="bonuscashback" class="nav-btn">💸 Bonus/Cashback</button>
+                <button onclick="showPage('dokonlar')" data-page-btn="dokonlar" class="nav-btn">🏪 Do'konlar</button>
+                {% if is_owner %}
+                <div class="border-t my-2 dark:border-gray-700"></div>
+                <button onclick="showPage('operatorlar')" data-page-btn="operatorlar" class="nav-btn">🧑‍💼 Operatorlar</button>
+                <button onclick="showPage('moliya')" data-page-btn="moliya" class="nav-btn">💰 Moliya</button>
+                <button onclick="showPage('xavfzone')" data-page-btn="xavfzone" class="nav-btn !text-red-600">⚠️ Reset</button>
+                {% endif %}
+            </nav>
+        </aside>
 
+        <main class="flex-1 mt-2 p-4 space-y-6 min-w-0" id="main-content">
+            <select id="mobile-page-select" onchange="showPage(this.value)" class="md:hidden w-full mb-2 p-2 border rounded-lg font-semibold">
+                <option value="bosh">🏠 Bosh sahifa</option>
+                <option value="buyurtmalar">📦 Buyurtmalar</option>
+                <option value="kuryerlar">🛵 Kuryerlar</option>
+                <option value="mijozlar">👥 Mijozlar</option>
+                <option value="tugilgankun">🎂 Tug'ilgan kunlar</option>
+                <option value="referal">🎁 Referal</option>
+                <option value="bonuscashback">💸 Bonus/Cashback</option>
+                <option value="dokonlar">🏪 Do'konlar</option>
+                {% if is_owner %}
+                <option value="operatorlar">🧑‍💼 Operatorlar</option>
+                <option value="moliya">💰 Moliya</option>
+                <option value="xavfzone">⚠️ Reset</option>
+                {% endif %}
+            </select>
+
+
+<section class="app-page" data-page="bosh">
         <!-- DASHBOARD & SETTINGS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -137,6 +192,9 @@
         </div>
         {% endif %}
 
+</section>
+
+        <section class="app-page" data-page="buyurtmalar" style="display:none;">
         <!-- YANGI BUYURTMA YARATISH -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md">
             <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📞 Yangi Buyurtma Yaratish (qo'lda)</h2>
@@ -260,6 +318,9 @@
             </div>
         </div>
 
+</section>
+
+        <section class="app-page" data-page="kuryerlar" style="display:none;">
         <!-- COURIERS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -365,6 +426,9 @@
 
         </div>
 
+</section>
+
+        <section class="app-page" data-page="mijozlar" style="display:none;">
         <!-- CLIENTS -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md">
             <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">👥 Mijozlar</h2>
@@ -411,6 +475,9 @@
         </div>
 
         {% if is_owner %}
+</section>
+
+        <section class="app-page" data-page="operatorlar" style="display:none;">
         <!-- OPERATORLAR (faqat OWNER) -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
@@ -492,6 +559,9 @@
         {% endif %}
 
         {% if is_owner %}
+</section>
+
+        <section class="app-page" data-page="moliya" style="display:none;">
         <!-- MOLIYAVIY BOSHQARUV (faqat OWNER) -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
@@ -571,6 +641,9 @@
         </div>
         {% endif %}
 
+</section>
+
+        <section class="app-page" data-page="dokonlar" style="display:none;">
         <!-- PARTNERS & PRODUCTS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -727,6 +800,9 @@
         </div>
 
         {% if is_owner %}
+</section>
+
+        <section class="app-page" data-page="xavfzone" style="display:none;">
         <!-- XAVF ZONASI (faqat OWNER) -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md border-2 border-red-500">
             <h2 class="text-lg font-bold mb-2 text-red-600">⚠️ Xavf Zonasi — Tizimni Tozalash</h2>
@@ -744,7 +820,99 @@
             </form>
         </div>
         {% endif %}
+</section>
 
+        <!-- TUG'ILGAN KUNLAR -->
+        <section class="app-page" data-page="tugilgankun" style="display:none;">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎂 Bugun Tug'ilgan Kuni Bo'lgan Mijozlar</h2>
+                <p class="text-xs text-gray-500 mb-3">Bu ro'yxat avtomatik — mijoz profilida tug'ilgan sana kiritilgan bo'lsa va bugun o'sha kun bo'lsa, shu yerda chiqadi.</p>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
+                            <tr class="border-b text-xs">
+                                <th class="p-2">Ism</th>
+                                <th class="p-2">Telefon</th>
+                                <th class="p-2">Yosh</th>
+                                <th class="p-2 text-center">Amal</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y text-sm dark:divide-gray-700">
+                            {% for client in birthday_clients_today %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <td class="p-2 font-medium">🎉 {{ client.full_name }}</td>
+                                <td class="p-2 text-xs">{{ client.phone_number }}</td>
+                                <td class="p-2 text-xs">{{ client.age }} yosh</td>
+                                <td class="p-2 text-center">
+                                    {% if is_owner %}
+                                    <form action="/admin/clients/{{ client.id }}/birthday-bonus" method="POST" class="inline">
+                                        <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold">🎁 Bonus berildi deb belgilash</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-[11px] text-gray-400">Faqat egasi belgilay oladi</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="p-3 text-center text-gray-400 text-xs">Bugun tug'ilgan kuni bo'lgan mijoz yo'q</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if is_owner %}
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tug'ilgan Kun Bonusi Sozlamasi</h2>
+                <form action="/admin/settings/birthday" method="POST" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Bonus summasi (so'm)</label>
+                        <input type="number" name="birthday_bonus_amount" value="{{ system_setting.birthday_bonus_amount if system_setting else 0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                        <p class="text-[11px] text-gray-500 mt-1">Mijoz tug'ilgan kunida qancha bonus berilishini shu yerda belgilaysiz. Faqat siz o'zgartira olasiz.</p>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Saqlash</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        </section>
+
+        <!-- REFERAL DASTURI -->
+        <section class="app-page" data-page="referal" style="display:none;">
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎁 Referal Dasturi</h2>
+            {% if is_owner %}
+            <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
+            <form action="/admin/settings/referral" method="POST" class="space-y-3">
+                <textarea name="referral_program_text" rows="10" placeholder="Masalan: Do'stingizni taklif qiling, u birinchi buyurtma bersa - ikkalangiz ham 10 000 so'm bonus olasiz..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else '' }}</textarea>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+            </form>
+            {% else %}
+            <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg min-h-[100px]">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else "Hozircha referal dasturi kiritilmagan." }}</div>
+            <p class="text-[11px] text-gray-400 mt-2">Bu bo'limni faqat egasi tahrirlay oladi.</p>
+            {% endif %}
+        </div>
+        </section>
+
+        <!-- BONUS VA CASHBACK -->
+        <section class="app-page" data-page="bonuscashback" style="display:none;">
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💸 Bonus va Cashback</h2>
+            {% if is_owner %}
+            <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
+            <form action="/admin/settings/cashback" method="POST" class="space-y-3">
+                <textarea name="bonus_cashback_text" rows="10" placeholder="Masalan: Har bir buyurtmadan 2% cashback qaytariladi, ballarni keyingi buyurtmada ishlatish mumkin..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else '' }}</textarea>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+            </form>
+            {% else %}
+            <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg min-h-[100px]">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else "Hozircha bonus/cashback dasturi kiritilmagan." }}</div>
+            <p class="text-[11px] text-gray-400 mt-2">Bu bo'limni faqat egasi tahrirlay oladi.</p>
+            {% endif %}
+        </div>
+        </section>
+
+        </main>
     </div>
 
     <!-- TAHRIRLASH MODALLARI -->
@@ -1007,10 +1175,35 @@
             localStorage.setItem('admin_theme', themeName);
         }
 
+        function showPage(pageName) {
+            document.querySelectorAll('.app-page').forEach(el => { el.style.display = 'none'; });
+            const target = document.querySelector(`.app-page[data-page="${pageName}"]`);
+            // Agar sahifa OWNER-only bo'lib, operator uchun Jinja tomonidan
+            // umuman renderlanmagan bo'lsa, target topilmaydi — shunda
+            // xato bermasdan bosh sahifaga qaytamiz.
+            if (target) {
+                target.style.display = '';
+            } else if (pageName !== 'bosh') {
+                showPage('bosh');
+                return;
+            }
+
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector(`[data-page-btn="${pageName}"]`);
+            if (btn) btn.classList.add('active');
+
+            const mobileSelect = document.getElementById('mobile-page-select');
+            if (mobileSelect) mobileSelect.value = pageName;
+
+            localStorage.setItem('admin_active_page', pageName);
+            window.scrollTo(0, 0);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
             setTheme(savedTheme);
             applyWeatherMultiplier();
+            showPage(localStorage.getItem('admin_active_page') || 'bosh');
         });
     </script>
 </body>

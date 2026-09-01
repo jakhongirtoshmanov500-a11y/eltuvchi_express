@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date, Enum, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -56,6 +56,10 @@ class User(Base):
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
     city = relationship("City", back_populates="operators")
 
+    # Faqat mijoz (CLIENT) uchun ishlatiladi — tug'ilgan kun bonusi tizimi uchun.
+    # Mijoz o'z kabinetida (keyingi bosqichda) kiritadi, hozircha bo'sh qoladi.
+    birth_date = Column(Date, nullable=True)
+
     # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
     # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
     courier_profile = relationship("CourierProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -73,7 +77,6 @@ class CourierProfile(Base):
     balance = Column(Float, default=0.0)
 
     user = relationship("User", back_populates="courier_profile")
-
 
 class PartnerProfile(Base):
     __tablename__ = "partner_profiles"
@@ -94,8 +97,6 @@ class PartnerProfile(Base):
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
-    orders = relationship("Order", back_populates="partner")
-
 
 class Product(Base):
     __tablename__ = "products"
@@ -108,7 +109,6 @@ class Product(Base):
     is_available = Column(Boolean, default=True)
 
     partner = relationship("PartnerProfile", back_populates="products")
-
 
 class Order(Base):
     __tablename__ = "orders"
@@ -125,8 +125,9 @@ class Order(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    partner = relationship("PartnerProfile", back_populates="orders")
+    # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
@@ -162,6 +163,12 @@ class SystemSetting(Base):
     # Yetkazish narxining necha foizi kuryerga tegishli ekani (qolgani egasiga qoladi).
     # Masalan 80.0 = yetkazish narxining 80%i kuryerga, 20%i egasiga.
     courier_share_percent = Column(Float, default=80.0)
+
+    # Tug'ilgan kun bonusi, referal va cashback dasturlari — bularning
+    # barchasini faqat OWNER qo'lda kiritadi/o'zgartiradi.
+    birthday_bonus_amount = Column(Float, default=0.0)
+    referral_program_text = Column(Text, nullable=True)
+    bonus_cashback_text = Column(Text, nullable=True)
 
 
 class TransactionType(enum.Enum):

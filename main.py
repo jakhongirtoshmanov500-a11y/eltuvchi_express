@@ -3,7 +3,6 @@ import os
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
-from auth import RedirectToLogin
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, extract
 from sqlalchemy.orm import selectinload
 
 from database import engine, Base, get_db, AsyncSessionLocal
@@ -339,6 +338,23 @@ async def admin_dashboard(
         ]
     )
 
+    # ---- BUGUN TUG'ILGAN KUNI BO'LGAN MIJOZLAR (OWNER va operator ikkalasi ham ko'radi) ----
+    # DIQQAT: bu yerda faqat oy+kun solishtiriladi (yil emas), chunki bizni
+    # "kim bugun tug'ilgan" qiziqtiradi, "kim aynan shu yil tug'ilgan" emas.
+    birthday_query = await db.execute(
+        select(User).where(
+            User.role == UserRole.CLIENT,
+            User.birth_date.isnot(None),
+            extract("month", User.birth_date) == today.month,
+            extract("day", User.birth_date) == today.day,
+        )
+    )
+    birthday_clients_today = birthday_query.scalars().all()
+    for _c in birthday_clients_today:
+        _c.age = today.year - _c.birth_date.year - (
+            (today.month, today.day) < (_c.birth_date.month, _c.birth_date.day)
+        )
+
     # ---- TRANZAKSIYALAR TARIXI (faqat OWNER, oxirgi 50 ta) ----
     recent_transactions = []
     if is_owner:
@@ -441,6 +457,7 @@ async def admin_dashboard(
             "status_labels": STATUS_LABELS_UZ,
             "next_status_map": NEXT_STATUS_MAP,
             "recent_transactions": recent_transactions,
+            "birthday_clients_today": birthday_clients_today,
             "analytics": analytics,
         },
     )
@@ -483,6 +500,48 @@ async def update_settings(
         setting.service_commission_percent = service_commission_percent
         setting.courier_share_percent = courier_share_percent
 
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+async def _get_or_create_setting(db: AsyncSession) -> SystemSetting:
+    result = await db.execute(select(SystemSetting))
+    setting = result.scalars().first()
+    if not setting:
+        setting = SystemSetting()
+        db.add(setting)
+    return setting
+
+
+@settings_router.post("/birthday")
+async def update_birthday_setting(
+    birthday_bonus_amount: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    setting = await _get_or_create_setting(db)
+    setting.birthday_bonus_amount = birthday_bonus_amount
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@settings_router.post("/referral")
+async def update_referral_setting(
+    referral_program_text: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    setting = await _get_or_create_setting(db)
+    setting.referral_program_text = referral_program_text
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@settings_router.post("/cashback")
+async def update_cashback_setting(
+    bonus_cashback_text: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    setting = await _get_or_create_setting(db)
+    setting.bonus_cashback_text = bonus_cashback_text
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -867,6 +926,33 @@ async def toggle_client(user_id: int, db: AsyncSession = Depends(get_db)):
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@clients_router.post("/{user_id}/birthday-bonus")
+async def mark_birthday_bonus_given(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    owner: User = Depends(require_owner),  # bu amal faqat OWNER uchun
+):
+    client_query = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.CLIENT))
+    client = client_query.scalars().first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    setting = await _get_or_create_setting(db)
+
+    # Balans emas, faqat TARIX sifatida yoziladi — chunki mijozda balans
+    # tushunchasi yo'q, bu shunchaki "kimga qachon bonus berilgani"ni
+    # eslab qolish uchun.
+    db.add(Transaction(
+        user_id=client.id,
+        type=TransactionType.DEPOSIT,
+        amount=setting.birthday_bonus_amount,
+        note=f"Tug'ilgan kun bonusi — {client.full_name}",
+        created_by_id=owner.id,
+    ))
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # ==================== 8. OPERATORLAR BOSHQARUVI (faqat OWNER) ====================
 @operators_router.post("/create")
 async def create_operator(
@@ -1039,6 +1125,7 @@ app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
 app.include_router(finance_router)
+
 # ==================== SESSIYASIZ URNILGANDA LOGIN'GA YUBORISH ====================
 @app.exception_handler(RedirectToLogin)
 async def redirect_to_login_handler(request: Request, exc: RedirectToLogin):
