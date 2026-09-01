@@ -45,19 +45,13 @@ def do_run_migrations(connection):
 async def run_async_migrations():
     """Loyihamiz asyncpg (async) drayver ishlatgani uchun, migratsiyani
     ham async engine orqali bajaramiz."""
-    connectable = create_async_engine(DATABASE_URL, poolclass=pool.NullPool)
+    connectable = create_async_engine(
+        DATABASE_URL,
+        poolclass=pool.NullPool,
+        connect_args={"ssl": "require"}  # <--- AYNAN SHU QATOR SSL XATOSINI YO'QOTADI
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()
-
-
-def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
-
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
