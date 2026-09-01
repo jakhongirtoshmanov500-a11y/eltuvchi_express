@@ -1,4 +1,7 @@
-.env
-venv/
+fix_db.py
+fix_render.py
 __pycache__/
 *.pyc
+.env
+venv/
+.venv/

@@ -97,6 +97,9 @@ class PartnerProfile(Base):
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
+    
+    # QO'SHILDI: Hamkor buyurtmalari ro'yxatiga bog'lanish
+    orders = relationship("Order", back_populates="partner")
 
 class Product(Base):
     __tablename__ = "products"
@@ -124,6 +127,11 @@ class Order(Base):
     delivery_address = Column(String, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # QO'SHILDI: main.py dagi compute_period_stats va boshqa statistikalar uchun zarur bog'lanishlar
+    client = relationship("User", foreign_keys=[client_id])
+    courier = relationship("User", foreign_keys=[courier_id])
+    partner = relationship("PartnerProfile", back_populates="orders")
 
     # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
