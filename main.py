@@ -1115,7 +1115,7 @@ async def reset_system(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# Barcha routerlarni ilovaga ulash
+# ==================== BARCHA ROUTERLARNI ULAB CHIQISH ====================
 app.include_router(admin_router)
 app.include_router(settings_router)
 app.include_router(orders_router)
@@ -1125,8 +1125,3 @@ app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
 app.include_router(finance_router)
-
-# ==================== SESSIYASIZ URNILGANDA LOGIN'GA YUBORISH ====================
-@app.exception_handler(RedirectToLogin)
-async def redirect_to_login_handler(request: Request, exc: RedirectToLogin):
-    return RedirectResponse(url="/login", status_code=303)
