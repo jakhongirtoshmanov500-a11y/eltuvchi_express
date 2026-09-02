@@ -1462,3 +1462,6 @@ async def shop_create_order(body: ShopOrderBody, db: AsyncSession = Depends(get_
 
 app.include_router(shop_router)
 app.include_router(finance_router)
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
