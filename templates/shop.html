@@ -23,7 +23,7 @@
         body.theme-gold .text-title { color: #713f12; }
         body.theme-gold .text-sub { color: #a16207; }
 
-        body.theme-green .card-bg { background-color: #ffffff; border-color: #bbf7d0; }
+        body.theme-green .card-bg { background-color: #dc26260d; background-color: #ffffff; border-color: #bbf7d0; }
         body.theme-green .text-title { color: #14532d; }
         body.theme-green .text-sub { color: #15803d; }
 
@@ -31,14 +31,9 @@
         body.theme-default .text-title { color: #0f172a; }
         body.theme-default .text-sub { color: #64748b; }
 
-        /* Toggle switch uslubi */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #f59e0b;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #f59e0b;
-        }
+        /* No-scrollbar yordamchi CSS */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body id="main-body" class="theme-default min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-24 transition-colors duration-300">
@@ -132,8 +127,11 @@
         let currentPartnerName = "";
         let products = [];
         let cart = {};
+
+        // Filtr va Keshbek holatlari
+        let selectedCategory = "Barchasi";
+        let searchQuery = "";
         let useCashback = false;
-        let selectedCategory = 'all';
 
         // Mavzuni yuklash va saqlash
         function setTheme(themeName) {
@@ -245,6 +243,10 @@
             const refCode = currentUser.referral_code || "";
             const refLink = `https://t.me/EltuvchiExpressBot?start=${refCode}`;
 
+            const userFirstName = currentUser.first_name || '';
+            const userBirthDate = currentUser.birth_date || '';
+            const userPhone = currentUser.phone || '—';
+
             app.innerHTML = `
                 <div class="mb-4 flex items-center justify-between">
                     <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-xl" onclick="goHome()">
@@ -263,23 +265,24 @@
                     </div>
                 </div>
 
-                <!-- Foydalanuvchi Ma'lumotlari va Tahrirlash -->
+                <!-- Foydalanuvchi Ma'lumotlarini Tahrirlash -->
                 <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
-                    <h3 class="text-xs font-black text-title uppercase tracking-wider mb-2">Shaxsiy ma'lumotlar</h3>
+                    <h3 class="text-xs font-black text-title uppercase tracking-wider mb-2">Shaxsiy Ma'lumotlar</h3>
                     <div>
-                        <label class="block text-[11px] font-semibold text-sub mb-1">Telefon raqam (Bot orqali tahrirlanadi):</label>
-                        <input type="text" readonly value="${currentUser.phone || '—'}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none opacity-80 cursor-not-allowed">
+                        <label class="block text-[11px] font-semibold text-sub mb-1">Telefon raqam (O'zgartirib bo'lmaydi)</label>
+                        <input type="text" readonly value="${userPhone}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-sub focus:outline-none cursor-not-allowed">
                     </div>
                     <div>
-                        <label class="block text-[11px] font-semibold text-sub mb-1">Ism va Familiya:</label>
-                        <input id="prof-name" type="text" value="${currentUser.first_name || ''}" placeholder="Ismingizni kiriting" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none focus:border-amber-500">
+                        <label class="block text-[11px] font-semibold text-sub mb-1">Ismingiz</label>
+                        <input id="profile-first-name" type="text" value="${userFirstName}" placeholder="Ismingizni kiriting" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none focus:border-amber-500">
                     </div>
                     <div>
-                        <label class="block text-[11px] font-semibold text-sub mb-1">Tug'ilgan kun (Sana-Oy-Yil):</label>
-                        <input id="prof-birth" type="date" value="${currentUser.birth_date || ''}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none focus:border-amber-500">
+                        <label class="block text-[11px] font-semibold text-sub mb-1">Tug'ilgan kun</label>
+                        <input id="profile-birth-date" type="date" value="${userBirthDate}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none focus:border-amber-500">
                     </div>
-                    <button onclick="saveProfile()" class="w-full mt-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200">
-                        Ma'lumotlarni saqlash
+                    <button onclick="updateProfile()" class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 flex justify-center items-center space-x-1.5 mt-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>Saqlash</span>
                     </button>
                 </div>
 
@@ -296,16 +299,18 @@
                 </div>`;
         }
 
-        async function saveProfile() {
-            const firstName = document.getElementById("prof-name").value.trim();
-            const birthDate = document.getElementById("prof-birth").value;
-            if (!firstName) { alert("Iltimos, ismingizni kiriting!"); return; }
+        async function updateProfile() {
+            const firstName = document.getElementById("profile-first-name").value.trim();
+            const birthDate = document.getElementById("profile-birth-date").value;
 
             try {
-                const res = await api("/profile/update", { first_name: firstName, birth_date: birthDate });
+                const res = await api("/profile/update", {
+                    first_name: firstName,
+                    birth_date: birthDate
+                });
                 currentUser.first_name = firstName;
                 currentUser.birth_date = birthDate;
-                alert("Ma'lumotlar saqlandi!");
+                alert(res.message || "Ma'lumotlar saqlandi!");
             } catch (e) {
                 alert("Xatolik: " + e.message);
             }
@@ -397,61 +402,67 @@
             currentPartnerName = partnerName;
             renderLoading("Menyu yuklanmoqda...");
             products = await apiGet(`/products?partner_id=${partnerId}`);
+
+            selectedCategory = "Barchasi";
+            searchQuery = "";
+
+            renderProductInterface();
+            updateCartBar();
+        }
+
+        function renderProductInterface() {
             const app = document.getElementById("app");
 
-            // Kategoriyalarni ajratib olish
-            const categories = ['all', ...new Set(products.map(p => p.category || 'Boshqa'))];
+            // Kategoriyalarni yig'ib olish
+            const categories = ["Barchasi", ...new Set(products.map(p => p.category || "Boshqa"))];
 
             app.innerHTML = `
                 <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadPartners()">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Do'konlarga qaytish
                 </button>
-                <h1 class="text-xl font-black text-title mb-3">${partnerName}</h1>
+                <h1 class="text-xl font-black text-title mb-3">${currentPartnerName}</h1>
                 
                 <!-- Qidiruv Inputi -->
                 <div class="relative mb-3">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-xs text-sub"></i>
-                    <input id="product-search" type="text" placeholder="Mahsulotlarni qidirish..." oninput="filterProducts()" class="w-full pl-9 pr-3 py-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title focus:outline-none focus:border-amber-500">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-sub text-xs"></i>
+                    <input id="search-input" type="text" value="${searchQuery}" placeholder="Mahsulotlarni izlash..." class="w-full pl-9 pr-3 py-2.5 card-bg border rounded-2xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all shadow-sm">
                 </div>
 
-                <!-- Kategoriyalar -->
-                <div class="flex items-center space-x-2 overflow-x-auto pb-2 mb-3 no-scrollbar" id="category-bar">
+                <!-- Kategoriya Tugmalari -->
+                <div class="flex space-x-2 overflow-x-auto no-scrollbar mb-4 pb-1" id="category-bar">
                     ${categories.map(cat => `
-                        <button onclick="setCategory('${cat}')" class="cat-btn border px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === cat ? 'bg-amber-500 text-white border-amber-500' : 'card-bg text-sub'}">
-                            ${cat === 'all' ? 'Barchasi' : cat}
+                        <button onclick="filterCategory('${cat}')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === cat ? 'bg-amber-500 text-white shadow-sm shadow-amber-200' : 'card-bg border text-sub hover:text-title'}">
+                            ${cat}
                         </button>
                     `).join('')}
                 </div>
 
                 <div class="space-y-2.5" id="product-list"></div>`;
 
-            renderFilteredProducts();
-            updateCartBar();
-        }
-
-        function setCategory(cat) {
-            selectedCategory = cat;
-            document.querySelectorAll('.cat-btn').forEach(btn => {
-                btn.className = "cat-btn border px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all card-bg text-sub";
+            document.getElementById("search-input").addEventListener("input", (e) => {
+                searchQuery = e.target.value.toLowerCase();
+                filterAndRenderProducts();
             });
-            event.target.className = "cat-btn border px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-amber-500 text-white border-amber-500";
-            filterProducts();
+
+            filterAndRenderProducts();
         }
 
-        function filterProducts() {
-            const query = (document.getElementById("product-search")?.value || "").toLowerCase();
-            renderFilteredProducts(query);
+        function filterCategory(cat) {
+            selectedCategory = cat;
+            renderProductInterface();
         }
 
-        function renderFilteredProducts(query = "") {
+        function filterAndRenderProducts() {
             const list = document.getElementById("product-list");
             if (!list) return;
 
             const filtered = products.filter(p => {
-                const matchesCat = selectedCategory === 'all' || (p.category || 'Boshqa') === selectedCategory;
-                const matchesSearch = p.name.toLowerCase().includes(query) || (p.description && p.description.toLowerCase().includes(query));
+                const matchesCat = selectedCategory === "Barchasi" || (p.category || "Boshqa") === selectedCategory;
+                const matchesSearch = p.name.toLowerCase().includes(searchQuery) || (p.description && p.description.toLowerCase().includes(searchQuery));
                 return matchesCat && matchesSearch;
             });
+
+            list.innerHTML = "";
 
             if (filtered.length === 0) {
                 list.innerHTML = `
@@ -462,7 +473,6 @@
                 return;
             }
 
-            list.innerHTML = "";
             filtered.forEach(p => {
                 const row = document.createElement("div");
                 row.className = "p-3.5 card-bg rounded-2xl shadow-sm border flex justify-between items-center space-x-3";
@@ -495,22 +505,19 @@
             bar.classList.remove("hidden");
         }
 
-        function toggleCashback() {
-            useCashback = !useCashback;
-            openCart();
-        }
-
         function openCart() {
             const items = Object.values(cart);
             const app = document.getElementById("app");
-            let total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
+            const originalTotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
 
-            const userCashback = currentUser ? (currentUser.cashback_balance || 0) : 0;
+            const userCashback = currentUser?.cashback_balance || 0;
+            const canUseCashback = userCashback > 0;
+
             let discount = 0;
-            if (useCashback && userCashback > 0) {
-                discount = Math.min(userCashback, total);
-                total = total - discount;
+            if (useCashback && canUseCashback) {
+                discount = Math.min(userCashback, originalTotal);
             }
+            const finalTotal = Math.max(0, originalTotal - discount);
 
             app.innerHTML = `
                 <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadProducts(currentPartnerId, currentPartnerName)">
@@ -519,39 +526,41 @@
                 <h1 class="text-xl font-black text-title mb-3">🛒 Savatingiz</h1>
                 <div class="space-y-2 mb-4" id="cart-items"></div>
                 
-                <!-- Keshbekni ishlatish bo'limi -->
-                ${userCashback > 0 ? `
-                <div class="card-bg p-3.5 rounded-2xl shadow-sm border mb-4 flex justify-between items-center">
-                    <div class="flex items-center space-x-2.5">
-                        <div class="w-8 h-8 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center font-bold text-xs">
-                            <i class="fa-solid fa-coins"></i>
-                        </div>
-                        <div>
-                            <div class="text-xs font-bold text-title">Keshbekdan foydalanish</div>
-                            <div class="text-[10px] text-sub font-medium">Mavjud: ${userCashback.toLocaleString()} so'm</div>
-                        </div>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" onchange="toggleCashback()" ${useCashback ? 'checked' : ''} class="sr-only peer">
-                        <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-                    </label>
-                </div>
-                ` : ''}
-
                 <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
                     <div>
                         <label class="block text-xs font-bold text-title mb-1">Yetkazib berish manzili</label>
                         <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all">
                     </div>
-                    ${discount > 0 ? `
-                    <div class="border-t border-slate-100/10 pt-2 flex justify-between items-center text-xs font-bold text-emerald-600">
-                        <span>Keshbek chegirmasi:</span>
-                        <span>-${discount.toLocaleString()} so'm</span>
+
+                    <!-- Keshbek Islatish Toggle Switch -->
+                    ${canUseCashback ? `
+                    <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center">
+                        <div>
+                            <div class="text-xs font-bold text-title">Keshbekdan foydalanish</div>
+                            <div class="text-[10px] text-sub">Mavjud: ${userCashback.toLocaleString()} so'm</div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="cashback-toggle" class="sr-only peer" ${useCashback ? 'checked' : ''} onchange="toggleCashbackUse(this.checked)">
+                            <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
                     </div>
                     ` : ''}
-                    <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center font-bold">
-                        <span class="text-xs text-sub">Jami to'lov:</span>
-                        <span class="text-base text-amber-600 font-black">${total.toLocaleString()} so'm</span>
+
+                    <div class="border-t border-slate-100/10 pt-3 space-y-1">
+                        <div class="flex justify-between items-center text-xs text-sub">
+                            <span>Mahsulotlar summasi:</span>
+                            <span>${originalTotal.toLocaleString()} so'm</span>
+                        </div>
+                        ${useCashback && discount > 0 ? `
+                        <div class="flex justify-between items-center text-xs text-emerald-600 font-bold">
+                            <span>Keshbek chegirmasi:</span>
+                            <span>-${discount.toLocaleString()} so'm</span>
+                        </div>
+                        ` : ''}
+                        <div class="flex justify-between items-center font-bold pt-1">
+                            <span class="text-xs text-sub">Jami to'lov:</span>
+                            <span class="text-base text-amber-600 font-black">${finalTotal.toLocaleString()} so'm</span>
+                        </div>
                     </div>
                 </div>
 
@@ -575,6 +584,11 @@
             });
         }
 
+        function toggleCashbackUse(checked) {
+            useCashback = checked;
+            openCart();
+        }
+
         function changeQty(productId, delta) {
             if (!cart[productId]) return;
             cart[productId].qty += delta;
@@ -592,7 +606,12 @@
             if (!address) { alert("Iltimos, yetkazish manzilini kiriting"); return; }
             const items = Object.values(cart).map(i => ({ product_id: i.product.id, quantity: i.qty }));
             try {
-                const result = await api("/order", { partner_id: currentPartnerId, delivery_address: address, items, use_cashback: useCashback });
+                const result = await api("/order", { 
+                    partner_id: currentPartnerId, 
+                    delivery_address: address, 
+                    items,
+                    use_cashback: useCashback 
+                });
                 document.getElementById("app").innerHTML = `
                     <div class="text-center py-16 card-bg rounded-3xl p-6 shadow-sm border my-4">
                         <div class="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
