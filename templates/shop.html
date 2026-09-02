@@ -7,23 +7,84 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-slate-50 min-h-screen text-slate-800 antialiased selection:bg-amber-500 selection:text-white pb-24">
+    <style>
+        /* Maxsus Fon Mavzulari */
+        body.theme-default { background-color: #f8fafc; color: #0f172a; }
+        body.theme-dark { background-color: #0f172a; color: #f8fafc; }
+        body.theme-gold { background-color: #fefce8; color: #422006; }
+        body.theme-green { background-color: #f0fdf4; color: #052e16; }
 
-    <!-- Brending Header / Logo -->
-    <header class="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">
+        /* Mavzuga mos kartochkalar */
+        body.theme-dark .card-bg { background-color: #1e293b; border-color: #334155; }
+        body.theme-dark .text-title { color: #f8fafc; }
+        body.theme-dark .text-sub { color: #94a3b8; }
+        
+        body.theme-gold .card-bg { background-color: #fffbeb; border-color: #fef08a; }
+        body.theme-gold .text-title { color: #713f12; }
+        body.theme-gold .text-sub { color: #a16207; }
+
+        body.theme-green .card-bg { background-color: #dc26260d; background-color: #ffffff; border-color: #bbf7d0; }
+        body.theme-green .text-title { color: #14532d; }
+        body.theme-green .text-sub { color: #15803d; }
+
+        body.theme-default .card-bg { background-color: #ffffff; border-color: #f1f5f9; }
+        body.theme-default .text-title { color: #0f172a; }
+        body.theme-default .text-sub { color: #64748b; }
+    </style>
+</head>
+<body id="main-body" class="theme-default min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-24 transition-colors duration-300">
+
+    <!-- Birinchi Kirganda Chiqadigan Splash / Welcome Screen -->
+    <div id="splash-screen" class="fixed inset-0 bg-slate-900 z-50 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-500">
+        <div class="relative mb-6">
+            <div class="absolute -inset-1 bg-gradient-to-r from-amber-500 to-amber-300 rounded-full blur opacity-50 animate-pulse"></div>
+            <img src="/static/images/logo.png" onerror="this.src='https://via.placeholder.com/120?text=Eltuvchi'" alt="Eltuvchi Express Logo" class="relative w-28 h-28 object-contain rounded-3xl shadow-2xl bg-white p-2">
+        </div>
+        <h1 class="text-2xl font-black text-white tracking-tight mb-2">Eltuvchi Express</h1>
+        <p class="text-xs font-semibold text-amber-400 max-w-xs leading-relaxed mb-8">Xizmatimizga Xush Kelibsiz!</p>
+        <div class="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+
+    <!-- Brending Header / Logo va Rejimlar -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-40 shadow-sm transition-colors duration-300" id="app-header">
         <div class="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-2.5 cursor-pointer" onclick="goHome()">
-                <div class="w-10 h-10 bg-gradient-to-tr from-amber-500 to-amber-400 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-md shadow-amber-200">
-                    <i class="fa-solid fa-bolt"></i>
-                </div>
+                <img src="/static/images/logo.png" onerror="this.style.display='none'" alt="Logo" class="w-9 h-9 object-contain rounded-xl">
                 <div>
                     <div class="font-black text-base text-slate-900 tracking-tight leading-none">ELTUVCHI</div>
                     <div class="text-[10px] font-extrabold text-amber-500 tracking-widest leading-none mt-0.5">EXPRESS</div>
                 </div>
             </div>
-            <button id="profile-btn" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-2xl flex items-center justify-center transition-all active:scale-95" onclick="openProfile()">
-                <i class="fa-solid fa-user-gear text-sm"></i>
+            
+            <div class="flex items-center space-x-2">
+                <!-- Fon Rangini O'zgartirish Tugmasi -->
+                <button onclick="toggleThemeMenu()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 w-9 h-9 rounded-2xl flex items-center justify-center transition-all active:scale-95">
+                    <i class="fa-solid fa-palette text-sm"></i>
+                </button>
+                <!-- Profil Tugmasi -->
+                <button id="profile-btn" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 w-9 h-9 rounded-2xl flex items-center justify-center transition-all active:scale-95" onclick="openProfile()">
+                    <i class="fa-solid fa-user-gear text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Fon Ranglarini Tanlash Menyusi -->
+        <div id="theme-menu" class="hidden bg-white border-t border-slate-100 px-4 py-3 flex justify-around items-center text-xs font-bold shadow-inner">
+            <button onclick="setTheme('theme-default')" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700">
+                <span class="w-3 h-3 rounded-full bg-slate-200 border"></span>
+                <span>Standart</span>
+            </button>
+            <button onclick="setTheme('theme-dark')" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-800 text-white">
+                <span class="w-3 h-3 rounded-full bg-slate-900"></span>
+                <span>Tungi</span>
+            </button>
+            <button onclick="setTheme('theme-gold')" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-amber-100 text-amber-900">
+                <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+                <span>Oltin</span>
+            </button>
+            <button onclick="setTheme('theme-green')" class="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-900">
+                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                <span>Yashil</span>
             </button>
         </div>
     </header>
@@ -63,6 +124,20 @@
         let products = [];
         let cart = {};
 
+        // Mavzuni yuklash va saqlash
+        function setTheme(themeName) {
+            document.getElementById("main-body").className = `${themeName} min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-24 transition-colors duration-300`;
+            localStorage.setItem("app_theme", themeName);
+            document.getElementById("theme-menu").classList.add("hidden");
+        }
+
+        function toggleThemeMenu() {
+            document.getElementById("theme-menu").classList.toggle("hidden");
+        }
+
+        const savedTheme = localStorage.getItem("app_theme") || "theme-default";
+        setTheme(savedTheme);
+
         async function api(path, body) {
             const res = await fetch(`/api/shop${path}`, {
                 method: "POST",
@@ -86,20 +161,20 @@
             document.getElementById("app").innerHTML = `
                 <div class="flex flex-col items-center justify-center py-20 space-y-3">
                     <div class="w-9 h-9 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p class="text-xs font-semibold text-slate-400">${msg}</p>
+                    <p class="text-xs font-semibold text-sub">${msg}</p>
                 </div>`;
         }
 
         function renderNeedsBotStart() {
             document.getElementById("profile-btn").classList.add("hidden");
             document.getElementById("app").innerHTML = `
-                <div class="text-center py-12 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 my-4">
+                <div class="text-center py-12 card-bg rounded-3xl p-6 shadow-sm border my-4">
                     <div class="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
                         <i class="fa-solid fa-id-card"></i>
                     </div>
-                    <h2 class="text-xl font-black text-slate-900 mb-2">Ro'yxatdan o'ting</h2>
-                    <p class="text-xs text-slate-500 mb-6 leading-relaxed">Xizmatlarimizdan foydalanish va buyurtma berish uchun, iltimos, bot orqali telefon raqamingizni tasdiqlang.</p>
-                    <div class="p-3.5 bg-slate-50 rounded-2xl text-xs text-slate-600 font-bold border border-slate-100 flex items-center space-x-2">
+                    <h2 class="text-xl font-black text-title mb-2">Ro'yxatdan o'ting</h2>
+                    <p class="text-xs text-sub mb-6 leading-relaxed">Xizmatlarimizdan foydalanish va buyurtma berish uchun, iltimos, bot orqali telefon raqamingizni tasdiqlang.</p>
+                    <div class="p-3.5 bg-amber-500/10 rounded-2xl text-xs text-title font-bold border border-amber-500/20 flex items-center space-x-2">
                         <i class="fa-solid fa-paper-plane text-amber-500 text-sm"></i>
                         <span>Bot chatiga qaytib, "📱 Telefon raqamni ulashish" tugmasini bosing.</span>
                     </div>
@@ -107,6 +182,15 @@
         }
 
         async function init() {
+            // Splash Screenni yopish (1.5 soniyadan keyin)
+            setTimeout(() => {
+                const splash = document.getElementById("splash-screen");
+                if (splash) {
+                    splash.classList.add("opacity-0");
+                    setTimeout(() => splash.remove(), 500);
+                }
+            }, 1500);
+
             if (!tg || !initData) {
                 renderLoading("Bu sahifa faqat Telegram ilovasi ichida ishlaydi.");
                 return;
@@ -155,7 +239,7 @@
                     <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-xl" onclick="goHome()">
                         <i class="fa-solid fa-arrow-left mr-1.5"></i> Qaytish
                     </button>
-                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Shaxsiy Kabinet</span>
+                    <span class="text-xs font-black text-sub uppercase tracking-widest">Shaxsiy Kabinet</span>
                 </div>
 
                 <!-- Keshbek Kartochkasi -->
@@ -169,27 +253,27 @@
                 </div>
 
                 <!-- Foydalanuvchi Ma'lumotlari -->
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 space-y-3">
-                    <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
-                        <span class="text-xs font-semibold text-slate-400">Ism:</span>
-                        <span class="text-xs font-bold text-slate-800">${currentUser.first_name || 'Kiritilmagan'}</span>
+                <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-100/10 pb-2.5">
+                        <span class="text-xs font-semibold text-sub">Ism:</span>
+                        <span class="text-xs font-bold text-title">${currentUser.first_name || 'Kiritilmagan'}</span>
                     </div>
-                    <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
-                        <span class="text-xs font-semibold text-slate-400">Tug'ilgan kun:</span>
-                        <span class="text-xs font-bold text-slate-800">${currentUser.birth_date || 'Kiritilmagan'}</span>
+                    <div class="flex justify-between items-center border-b border-slate-100/10 pb-2.5">
+                        <span class="text-xs font-semibold text-sub">Tug'ilgan kun:</span>
+                        <span class="text-xs font-bold text-title">${currentUser.birth_date || 'Kiritilmagan'}</span>
                     </div>
                     <div class="flex justify-between items-center">
-                        <span class="text-xs font-semibold text-slate-400">Telefon:</span>
-                        <span class="text-xs font-bold text-slate-800">${currentUser.phone || '—'}</span>
+                        <span class="text-xs font-semibold text-sub">Telefon:</span>
+                        <span class="text-xs font-bold text-title">${currentUser.phone || '—'}</span>
                     </div>
                 </div>
 
                 <!-- Referal Tizimi -->
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4">
-                    <label class="block text-xs font-bold text-slate-800 mb-1.5">🎁 Do'stlarni taklif qiling</label>
-                    <p class="text-[11px] text-slate-400 mb-3">Sizning referal havolangiz orqali kirgan do'stlaringiz uchun bonus olasiz.</p>
+                <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4">
+                    <label class="block text-xs font-bold text-title mb-1.5">🎁 Do'stlarni taklif qiling</label>
+                    <p class="text-[11px] text-sub mb-3">Sizning referal havolangiz orqali kirgan do'stlaringiz uchun bonus olasiz.</p>
                     <div class="flex items-center space-x-2">
-                        <input type="text" readonly value="${refLink}" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none">
+                        <input type="text" readonly value="${refLink}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-mono text-title focus:outline-none">
                         <button onclick="copyLink('${refLink}')" class="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200">
                             Nusxalash
                         </button>
@@ -205,15 +289,15 @@
         function renderCitySelect(cities) {
             document.getElementById("app").innerHTML = `
                 <div class="mb-5">
-                    <h1 class="text-xl font-black text-slate-900 tracking-tight">📍 Shaharni tanlang</h1>
-                    <p class="text-xs text-slate-400 mt-0.5">Xizmat ko'rsatilish hududini belgilang</p>
+                    <h1 class="text-xl font-black text-title tracking-tight">📍 Shaharni tanlang</h1>
+                    <p class="text-xs text-sub mt-0.5">Xizmat ko'rsatilish hududini belgilang</p>
                 </div>
                 <div class="space-y-2" id="city-list"></div>`;
             const list = document.getElementById("city-list");
             cities.forEach(c => {
                 const btn = document.createElement("button");
-                btn.className = "w-full text-left p-4 bg-white active:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-800 flex justify-between items-center transition-all active:scale-[0.99]";
-                btn.innerHTML = `<span>${c.name}</span><i class="fa-solid fa-chevron-right text-xs text-slate-300"></i>`;
+                btn.className = "w-full text-left p-4 card-bg active:scale-[0.99] rounded-2xl shadow-sm border font-bold text-title flex justify-between items-center transition-all";
+                btn.innerHTML = `<span>${c.name}</span><i class="fa-solid fa-chevron-right text-xs text-sub"></i>`;
                 btn.onclick = async () => {
                     await api("/set-city", { city_id: c.id });
                     currentCityId = c.id;
@@ -230,39 +314,39 @@
             const app = document.getElementById("app");
             
             app.innerHTML = `
-                <div class="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-100 mb-4">
+                <div class="flex justify-between items-center card-bg p-3 rounded-2xl shadow-sm border mb-4">
                     <div class="flex items-center space-x-2 overflow-hidden">
                         <div class="w-7 h-7 bg-amber-50 text-amber-500 rounded-lg flex items-center justify-center text-xs">
                             <i class="fa-solid fa-location-dot"></i>
                         </div>
-                        <span class="font-bold text-xs text-slate-800 truncate">${currentCityName}</span>
+                        <span class="font-bold text-xs text-title truncate">${currentCityName}</span>
                     </div>
                     <button onclick="changeCityPrompt()" class="text-[11px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-xl transition-all">
                         O'zgartirish
                     </button>
                 </div>
 
-                <h1 class="text-lg font-black text-slate-900 mb-3">🏪 Muassasalar</h1>
+                <h1 class="text-lg font-black text-title mb-3">🏪 Muassasalar</h1>
                 <div class="space-y-2.5" id="partner-list"></div>`;
 
             const list = document.getElementById("partner-list");
             if (partners.length === 0) {
                 list.innerHTML = `
-                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-4">
-                        <i class="fa-solid fa-store-slash text-2xl text-slate-300 mb-2"></i>
-                        <p class="text-xs text-slate-400 font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
+                    <div class="text-center py-12 card-bg rounded-2xl border border-dashed p-4">
+                        <i class="fa-solid fa-store-slash text-2xl text-sub mb-2"></i>
+                        <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
                     </div>`;
                 return;
             }
             partners.forEach(p => {
                 const card = document.createElement("button");
-                card.className = "w-full text-left p-4 bg-white rounded-2xl shadow-sm border border-slate-100 active:bg-slate-50 transition-all duration-200 active:scale-[0.99]";
+                card.className = "w-full text-left p-4 card-bg rounded-2xl shadow-sm border transition-all duration-200 active:scale-[0.99]";
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-1">
-                        <div class="font-black text-sm text-slate-900">${p.name}</div>
-                        <span class="text-[9px] uppercase font-bold tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${p.category || "Restoran"}</span>
+                        <div class="font-black text-sm text-title">${p.name}</div>
+                        <span class="text-[9px] uppercase font-bold tracking-wider bg-slate-500/10 text-title px-2 py-0.5 rounded-md">${p.category || "Restoran"}</span>
                     </div>
-                    <div class="text-xs text-slate-400 flex items-center space-x-1">
+                    <div class="text-xs text-sub flex items-center space-x-1">
                         <i class="fa-solid fa-map-pin text-[10px]"></i>
                         <span class="truncate">${p.address || "Manzil ko'rsatilmagan"}</span>
                     </div>`;
@@ -288,24 +372,24 @@
                 <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadPartners()">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Do'konlarga qaytish
                 </button>
-                <h1 class="text-xl font-black text-slate-900 mb-3">${partnerName}</h1>
+                <h1 class="text-xl font-black text-title mb-3">${partnerName}</h1>
                 <div class="space-y-2.5" id="product-list"></div>`;
 
             const list = document.getElementById("product-list");
             if (products.length === 0) {
                 list.innerHTML = `
-                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-4">
-                        <i class="fa-solid fa-box-open text-2xl text-slate-300 mb-2"></i>
-                        <p class="text-xs text-slate-400 font-medium">Bu do'konda hozircha mahsulot yo'q.</p>
+                    <div class="text-center py-12 card-bg rounded-2xl border border-dashed p-4">
+                        <i class="fa-solid fa-box-open text-2xl text-sub mb-2"></i>
+                        <p class="text-xs text-sub font-medium">Bu do'konda hozircha mahsulot yo'q.</p>
                     </div>`;
             }
             products.forEach(p => {
                 const row = document.createElement("div");
-                row.className = "p-3.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center space-x-3";
+                row.className = "p-3.5 card-bg rounded-2xl shadow-sm border flex justify-between items-center space-x-3";
                 row.innerHTML = `
                     <div class="flex-1 min-w-0">
-                        <div class="font-bold text-xs text-slate-900 truncate">${p.name}</div>
-                        <div class="text-[11px] text-slate-400 line-clamp-2 mt-0.5">${p.description || ""}</div>
+                        <div class="font-bold text-xs text-title truncate">${p.name}</div>
+                        <div class="text-[11px] text-sub line-clamp-2 mt-0.5">${p.description || ""}</div>
                         <div class="text-xs font-black text-amber-600 mt-1.5">${p.price.toLocaleString()} so'm</div>
                     </div>
                     <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p)})'>
@@ -340,16 +424,16 @@
                 <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadProducts(currentPartnerId, currentPartnerName)">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Menyuga qaytish
                 </button>
-                <h1 class="text-xl font-black text-slate-900 mb-3">🛒 Savatingiz</h1>
+                <h1 class="text-xl font-black text-title mb-3">🛒 Savatingiz</h1>
                 <div class="space-y-2 mb-4" id="cart-items"></div>
                 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 space-y-3">
+                <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Yetkazib berish manzili</label>
-                        <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-amber-500 transition-all">
+                        <label class="block text-xs font-bold text-title mb-1">Yetkazib berish manzili</label>
+                        <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all">
                     </div>
-                    <div class="border-t border-slate-100 pt-3 flex justify-between items-center font-bold">
-                        <span class="text-xs text-slate-500">Jami summa:</span>
+                    <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center font-bold">
+                        <span class="text-xs text-sub">Jami summa:</span>
                         <span class="text-base text-amber-600 font-black">${total.toLocaleString()} so'm</span>
                     </div>
                 </div>
@@ -362,13 +446,13 @@
             const list = document.getElementById("cart-items");
             items.forEach(i => {
                 const row = document.createElement("div");
-                row.className = "p-3 bg-white rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center";
+                row.className = "p-3 card-bg rounded-2xl shadow-sm border flex justify-between items-center";
                 row.innerHTML = `
-                    <div class="text-xs font-bold text-slate-800">${i.product.name}</div>
+                    <div class="text-xs font-bold text-title">${i.product.name}</div>
                     <div class="flex items-center space-x-2">
-                        <button class="w-7 h-7 bg-slate-100 active:bg-slate-200 rounded-lg font-bold text-slate-700 transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, -1)">−</button>
-                        <span class="text-xs font-bold w-5 text-center text-slate-900">${i.qty}</span>
-                        <button class="w-7 h-7 bg-slate-100 active:bg-slate-200 rounded-lg font-bold text-slate-700 transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, 1)">+</button>
+                        <button class="w-7 h-7 bg-slate-500/10 active:bg-slate-500/20 rounded-lg font-bold text-title transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, -1)">−</button>
+                        <span class="text-xs font-bold w-5 text-center text-title">${i.qty}</span>
+                        <button class="w-7 h-7 bg-slate-500/10 active:bg-slate-500/20 rounded-lg font-bold text-title transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, 1)">+</button>
                     </div>`;
                 list.appendChild(row);
             });
@@ -393,13 +477,13 @@
             try {
                 const result = await api("/order", { partner_id: currentPartnerId, delivery_address: address, items });
                 document.getElementById("app").innerHTML = `
-                    <div class="text-center py-16 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 my-4">
+                    <div class="text-center py-16 card-bg rounded-3xl p-6 shadow-sm border my-4">
                         <div class="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
                             <i class="fa-solid fa-circle-check"></i>
                         </div>
-                        <h2 class="text-xl font-black text-slate-900 mb-1">Buyurtma qabul qilindi!</h2>
-                        <p class="text-xs text-slate-400 font-medium mb-3">Buyurtma raqami: #${result.order_id}</p>
-                        <p class="text-xs text-slate-500">Tez orada kuryerimiz siz bilan bog'lanadi.</p>
+                        <h2 class="text-xl font-black text-title mb-1">Buyurtma qabul qilindi!</h2>
+                        <p class="text-xs text-sub font-medium mb-3">Buyurtma raqami: #${result.order_id}</p>
+                        <p class="text-xs text-sub">Tez orada kuryerimiz siz bilan bog'lanadi.</p>
                     </div>`;
                 document.getElementById("cart-bar").classList.add("hidden");
                 cart = {};
