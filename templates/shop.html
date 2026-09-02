@@ -171,8 +171,10 @@
             return res.json();
         }
 
+        // TUZATILGAN API GET FUNKSIYASI (Query parameter mantiqi to'g'rilandi)
         async function apiGet(path) {
-            const res = await fetch(`/api/shop${path}?init_data=${encodeURIComponent(initData)}`);
+            const separator = path.includes('?') ? '&' : '?';
+            const res = await fetch(`/api/shop${path}${separator}init_data=${encodeURIComponent(initData)}`);
             if (!res.ok) throw new Error("Xatolik yuz berdi");
             return res.json();
         }
@@ -757,7 +759,7 @@
                         <textarea id="order-comment" rows="2" placeholder="Masalan: Podyezd kodi 123..." class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none">${orderComment}</textarea>
                     </div>
 
-                    <!-- REAL TO'LOV TURLARI (Keshbek bu yerdan olib tashlandi) -->
+                    <!-- REAL TO'LOV TURLARI -->
                     <div class="border-t border-slate-100/10 pt-3">
                         <label class="block text-xs font-bold text-title mb-1.5">To'lov usuli</label>
                         <div class="grid grid-cols-3 gap-2 text-xs font-bold">
@@ -776,7 +778,7 @@
                         </div>
                     </div>
 
-                    <!-- KESHBEKDAN FOYDALANISH ALOHIDA QISM (TOGGLE SWITCH) -->
+                    <!-- KESHBEKDAN FOYDALANISH ALOHIDA QISM -->
                     ${canUseCashback ? `
                     <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center bg-amber-500/5 p-2.5 rounded-xl border border-amber-500/20">
                         <div>
