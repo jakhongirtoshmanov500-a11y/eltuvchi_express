@@ -14,6 +14,7 @@ from sqlalchemy import select, func, text, extract
 from sqlalchemy.orm import selectinload
 
 from database import engine, Base, get_db, AsyncSessionLocal
+from telegram_bot import send_telegram_message, contact_request_keyboard, normalize_phone, set_telegram_webhook
 from models import (
     User,
     UserRole,
@@ -99,13 +100,6 @@ async def seed_default_data():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        # DIQQAT: bazaning sxemasini (jadval/ustunlar) boshqarish endi Alembic
-        # zimmasida (qarang: alembic/, va Render'dagi Start Command).
-        # create_all bu yerda faqat BIRINCHI marta, hali umuman bo'sh bazaga
-        # ishga tushirilganda foydali — u YANGI jadvallarni yaratadi, lekin
-        # mavjud jadvalga yangi ustun qo'sha olmaydi. Shu sababli, modelga
-        # o'zgartirish kiritilganda, endi HAR DOIM Alembic migratsiyasi
-        # yozilishi va ishga tushirilishi kerak (README'dagi yo'riqnomaga qarang).
         await conn.run_sync(Base.metadata.create_all)
 
     print("PostgreSQL jadvallari tayyor (sxema Alembic orqali boshqariladi).")
@@ -115,10 +109,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Eltuvchi Express API", lifespan=lifespan)
 
-# Sessiya (login holatini "eslab qolish") uchun. SESSION_SECRET_KEY albatta
-# .env faylida bo'lishi kerak — aks holda server qayta ishga tushganda barcha
-# foydalanuvchilar tizimdan chiqarilib yuboriladi, va agar kimdir bu kalitni
-# bilib olsa, sessiyani soxtalashtirishi mumkin bo'ladi.
 SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY")
 if not SESSION_SECRET_KEY:
     print("DIQQAT: SESSION_SECRET_KEY .env'da yo'q — vaqtinchalik tasodifiy kalit ishlatilyapti.")
@@ -134,17 +124,11 @@ async def redirect_to_login_handler(request: Request, exc: RedirectToLogin):
 
 
 # Statik fayllar va shablonlar
-# DIQQAT: agar "static" papkasi serverda mavjud bo'lmasa (masalan, Git bo'sh
-# papkalarni saqlamagani uchun), StaticFiles import paytida xatolik berib,
-# butun dastur ishga tushmay qolardi. Shuning uchun avval papka borligini
-# ta'minlaymiz.
 os.makedirs("static/images", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Routerlar. DIQQAT: `dependencies=[Depends(get_current_admin_user)]` — bu router
-# ostidagi BARCHA route'lar uchun "login qilingan bo'lishi shart" tekshiruvini
-# avtomatik qo'shadi. `require_owner` esa qo'shimcha — faqat OWNER'ga.
+# Routerlar e'loni
 admin_router = APIRouter(tags=["Admin Dashboard"])
 settings_router = APIRouter(
     prefix="/admin/settings", tags=["Tizim Sozlamalari"], dependencies=[Depends(require_owner)]
@@ -218,14 +202,12 @@ async def admin_dashboard(
     today = date.today()
     is_owner = current_user.role == UserRole.OWNER
 
-    # OWNER shaharni tepadagi almashtirgichdan tanlaydi (None = "Barchasi").
-    # Operator uchun bu — har doim o'ziga biriktirilgan shahar, o'zgartira olmaydi.
     active_city_id = city_id if is_owner else current_user.city_id
 
     cities_query = await db.execute(select(City).order_by(City.name))
     all_cities = cities_query.scalars().all()
 
-    # ---- DO'KONLAR (shahar bo'yicha filtrlanadi) ----
+    # ---- DO'KONLAR ----
     partners_stmt = select(PartnerProfile).options(selectinload(PartnerProfile.city))
     if active_city_id is not None:
         partners_stmt = partners_stmt.where(PartnerProfile.city_id == active_city_id)
@@ -233,7 +215,7 @@ async def admin_dashboard(
     partners = partners_query.scalars().all()
     active_partners = sum(1 for p in partners if p.is_open)
 
-    # ---- MAHSULOTLAR (do'kon orqali shaharga bog'lanadi) ----
+    # ---- MAHSULOTLAR ----
     products_stmt = select(Product).options(selectinload(Product.partner))
     if active_city_id is not None:
         products_stmt = products_stmt.join(PartnerProfile, Product.partner_id == PartnerProfile.id).where(
@@ -242,7 +224,7 @@ async def admin_dashboard(
     products_query = await db.execute(products_stmt)
     products = products_query.scalars().all()
 
-    # ---- KURYERLAR (shahar bo'yicha filtrlanadi) ----
+    # ---- KURYERLAR ----
     couriers_stmt = select(User).where(User.role == UserRole.COURIER, User.is_active == True)
     if active_city_id is not None:
         couriers_stmt = couriers_stmt.where(User.city_id == active_city_id)
@@ -262,9 +244,6 @@ async def admin_dashboard(
     all_couriers = all_couriers_query.scalars().all()
 
     # ---- MIJOZLAR ----
-    # DIQQAT: mijozlar hozircha shahar bo'yicha filtrlanmaydi (mijozda o'zining
-    # shahar maydoni yo'q). Bu — bilib turilgan cheklov, keyinroq (mijoz
-    # buyurtma qilgan do'konlar orqali) aniqlashtirilishi mumkin.
     clients_query = await db.execute(
         select(
             User,
@@ -278,7 +257,7 @@ async def admin_dashboard(
     )
     clients = clients_query.all()
 
-    # ---- OPERATORLAR (faqat OWNER ko'radi, lekin har doim so'raymiz — arzon so'rov) ----
+    # ---- OPERATORLAR ----
     operators_query = await db.execute(
         select(User)
         .where(User.role == UserRole.ADMIN)
@@ -304,7 +283,7 @@ async def admin_dashboard(
     today_revenue_val = (await db.execute(revenue_stmt)).scalar() or 0.0
     today_revenue = f"{today_revenue_val:,.0f}".replace(",", " ")
 
-    # ---- BUYURTMALAR (tarkibi bilan, shahar bo'yicha filtrlangan) ----
+    # ---- BUYURTMALAR ----
     orders_stmt = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
     if active_city_id is not None:
         orders_stmt = orders_stmt.join(PartnerProfile, Order.partner_id == PartnerProfile.id).where(
@@ -322,8 +301,6 @@ async def admin_dashboard(
     else:
         suggested_delivery_fee = 10000.0
 
-    # "Qo'lda buyurtma yaratish" formasi uchun — mahsulotlarni JS tomonida
-    # do'konga qarab guruhlab ko'rsatish maqsadida JSON qilib tayyorlaymiz
     products_json = json.dumps(
         [
             {
@@ -338,9 +315,7 @@ async def admin_dashboard(
         ]
     )
 
-    # ---- BUGUN TUG'ILGAN KUNI BO'LGAN MIJOZLAR (OWNER va operator ikkalasi ham ko'radi) ----
-    # DIQQAT: bu yerda faqat oy+kun solishtiriladi (yil emas), chunki bizni
-    # "kim bugun tug'ilgan" qiziqtiradi, "kim aynan shu yil tug'ilgan" emas.
+    # ---- BUGUN TUG'ILGAN KUNI BO'LGAN MIJOZLAR ----
     birthday_query = await db.execute(
         select(User).where(
             User.role == UserRole.CLIENT,
@@ -355,7 +330,7 @@ async def admin_dashboard(
             (today.month, today.day) < (_c.birth_date.month, _c.birth_date.day)
         )
 
-    # ---- TRANZAKSIYALAR TARIXI (faqat OWNER, oxirgi 50 ta) ----
+    # ---- TRANZAKSIYALAR TARIXI ----
     recent_transactions = []
     if is_owner:
         tx_query = await db.execute(
@@ -370,11 +345,7 @@ async def admin_dashboard(
         )
         recent_transactions = tx_query.scalars().all()
 
-    # ---- ANALITIKA (faqat OWNER) ----
-    # DIQQAT: komissiya foizi har bir do'kon uchun boshqacha bo'lishi mumkin
-    # (partner.commission_rate), shuning uchun buni SQL darajasida bitta
-    # formula bilan hisoblab bo'lmaydi — har bir buyurtmani alohida ko'rib,
-    # o'sha buyurtmaning o'z hamkoriga tegishli foizi bilan hisoblaymiz.
+    # ---- ANALITIKA ----
     analytics = None
     if is_owner:
         month_start = today.replace(day=1)
@@ -463,7 +434,7 @@ async def admin_dashboard(
     )
 
 
-# ==================== 2. TIZIM SOZLAMALARI (faqat OWNER) ====================
+# ==================== 2. TIZIM SOZLAMALARI ====================
 @settings_router.post("")
 async def update_settings(
     base_fee: float = Form(...),
@@ -546,7 +517,7 @@ async def update_cashback_setting(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ==================== 3. BUYURTMALAR BOSHQARUVI (login qilingan har kim) ====================
+# ==================== 3. BUYURTMALAR BOSHQARUVI ====================
 @orders_router.post("/create")
 async def create_order(
     partner_id: int = Form(...),
@@ -627,11 +598,18 @@ async def update_order_status_and_courier(
     courier_id: Optional[int] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    order_query = await db.execute(select(Order).where(Order.id == order_id))
+    order_query = await db.execute(
+        select(Order)
+        .options(selectinload(Order.partner))
+        .where(Order.id == order_id)
+    )
     order = order_query.scalars().first()
 
     if not order:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
+
+    old_status = order.status
+    old_courier_id = order.courier_id
 
     try:
         order.status = OrderStatus(new_status)
@@ -642,12 +620,37 @@ async def update_order_status_and_courier(
         order.courier_id = courier_id
 
     await db.commit()
+
+    try:
+        if order.status != old_status:
+            client_query = await db.execute(select(User).where(User.id == order.client_id))
+            client = client_query.scalars().first()
+            if client and client.telegram_id:
+                label = STATUS_LABELS_UZ.get(order.status.value, order.status.value)
+                await send_telegram_message(
+                    client.telegram_id,
+                    f"📦 <b>Buyurtma #{order.id}</b> holati yangilandi:\n<b>{label}</b>",
+                )
+
+        if courier_id and courier_id != old_courier_id:
+            courier_query = await db.execute(select(User).where(User.id == courier_id))
+            courier = courier_query.scalars().first()
+            if courier and courier.telegram_id:
+                partner_name = order.partner.brand_name if order.partner else "—"
+                await send_telegram_message(
+                    courier.telegram_id,
+                    f"🛵 Sizga yangi buyurtma biriktirildi!\n\n"
+                    f"<b>Buyurtma:</b> #{order.id}\n"
+                    f"<b>Do'kon:</b> {partner_name}\n"
+                    f"<b>Manzil:</b> {order.delivery_address}",
+                )
+    except Exception as e:
+        print(f"Bildirishnoma yuborishda xatolik: {e}")
+
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ==================== 4. DO'KONLAR BOSHQARUVI ====================
-# DIQQAT: create/update/delete — faqat OWNER (require_owner qo'shimcha tekshiruvi bilan).
-# toggle — operator ham qila oladi (router darajasidagi get_current_admin_user yetarli).
 @partners_router.post("/create")
 async def create_partner(
     brand_name: str = Form(...),
@@ -786,8 +789,6 @@ async def update_product(
 
 @products_router.post("/{product_id}/toggle")
 async def toggle_product(product_id: int, db: AsyncSession = Depends(get_db)):
-    # DIQQAT: toggle (mavjud/tugadi belgilash) — operator ham qila oladi,
-    # chunki bu kunlik operatsion ish (masalan "bugun tovuq tugadi").
     prod_query = await db.execute(select(Product).where(Product.id == product_id))
     product = prod_query.scalars().first()
     if not product:
@@ -824,7 +825,6 @@ async def create_courier(
     if existing_query.scalars().first():
         raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon ro'yxatdan o'tgan")
 
-    # Operator faqat o'z shahriga kuryer qo'sha oladi — city_id majburan o'ziniki bo'ladi
     resolved_city_id = city_id if current_user.role == UserRole.OWNER else current_user.city_id
 
     new_user = User(
@@ -881,7 +881,6 @@ async def update_courier(
     if courier_user.courier_profile:
         courier_user.courier_profile.transport_type = transport_type
 
-    # Faqat OWNER kuryerni boshqa shaharga o'tkaza oladi
     if current_user.role == UserRole.OWNER and city_id is not None:
         courier_user.city_id = city_id
 
@@ -930,7 +929,7 @@ async def toggle_client(user_id: int, db: AsyncSession = Depends(get_db)):
 async def mark_birthday_bonus_given(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    owner: User = Depends(require_owner),  # bu amal faqat OWNER uchun
+    owner: User = Depends(require_owner),
 ):
     client_query = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.CLIENT))
     client = client_query.scalars().first()
@@ -939,9 +938,6 @@ async def mark_birthday_bonus_given(
 
     setting = await _get_or_create_setting(db)
 
-    # Balans emas, faqat TARIX sifatida yoziladi — chunki mijozda balans
-    # tushunchasi yo'q, bu shunchaki "kimga qachon bonus berilgani"ni
-    # eslab qolish uchun.
     db.add(Transaction(
         user_id=client.id,
         type=TransactionType.DEPOSIT,
@@ -953,7 +949,7 @@ async def mark_birthday_bonus_given(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ==================== 8. OPERATORLAR BOSHQARUVI (faqat OWNER) ====================
+# ==================== 8. OPERATORLAR BOSHQARUVI ====================
 @operators_router.post("/create")
 async def create_operator(
     full_name: str = Form(...),
@@ -1003,11 +999,11 @@ async def delete_operator(user_id: int, db: AsyncSession = Depends(get_db)):
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ==================== 8. MOLIYAVIY BOSHQARUV (faqat OWNER) ====================
+# ==================== 9. MOLIYAVIY BOSHQARUV ====================
 @finance_router.post("/courier")
 async def update_courier_balance(
     user_id: int = Form(...),
-    action: str = Form(...),  # "deposit" yoki "withdraw"
+    action: str = Form(...),
     amount: float = Form(...),
     note: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -1082,27 +1078,19 @@ async def update_partner_balance(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ==================== 9. TIZIMNI TOZALASH — RESET (faqat OWNER) ====================
+# ==================== 10. TIZIMNI TOZALASH — RESET ====================
 @app.post("/admin/reset")
 async def reset_system(
     confirmation: str = Form(...),
     db: AsyncSession = Depends(get_db),
     owner: User = Depends(require_owner),
 ):
-    # Ikki bosqichli himoya: JS'da tasdiqlash oynasi + bu yerda aniq matn
-    # ("TOZALASH") kiritilishi shart. Bu — qaytarib bo'lmaydigan amal bo'lgani
-    # uchun, tasodifan bosilib ketishning oldini olish uchun ataylab qattiq
-    # qilingan.
     if confirmation != "TOZALASH":
         raise HTTPException(
             status_code=400,
             detail="Tasdiqlash matni noto'g'ri. Aniq katta harflarda 'TOZALASH' deb yozing.",
         )
 
-    # DIQQAT: bu yerda ataylab FK (bog'liqlik) tartibiga rioya qilingan —
-    # avval "farzand" jadvallar, keyin "ota" jadvallar o'chiriladi.
-    # OWNER va operatorlar (ADMIN roli), shaharlar va tizim sozlamalari
-    # HECH QACHON bu bilan o'chirilmaydi — aks holda tizimga kirolmay qolasiz.
     await db.execute(text("DELETE FROM order_items"))
     await db.execute(text("DELETE FROM orders"))
     await db.execute(text("DELETE FROM transactions"))
@@ -1115,7 +1103,74 @@ async def reset_system(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ==================== BARCHA ROUTERLARNI ULAB CHIQISH ====================
+# ==================== 11. TELEGRAM BOT ====================
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    update = await request.json()
+    message = update.get("message")
+    if not message:
+        return {"ok": True}
+
+    chat_id = message["chat"]["id"]
+    text = message.get("text", "")
+    contact = message.get("contact")
+
+    if text == "/start":
+        await send_telegram_message(
+            chat_id,
+            "Assalomu alaykum! 👋 <b>Eltuvchi Express</b> botiga xush kelibsiz.\n\n"
+            "Tizimga ulanish uchun quyidagi tugma orqali telefon raqamingizni yuboring:",
+            reply_markup=contact_request_keyboard(),
+        )
+        return {"ok": True}
+
+    if contact:
+        phone = normalize_phone(contact.get("phone_number", ""))
+        result = await db.execute(select(User).where(User.phone_number == phone))
+        user = result.scalars().first()
+
+        if user:
+            user.telegram_id = str(chat_id)
+            await db.commit()
+            role_names = {
+                UserRole.CLIENT: "mijoz",
+                UserRole.COURIER: "kuryer",
+                UserRole.PARTNER: "hamkor",
+            }
+            role_text = role_names.get(user.role, "foydalanuvchi")
+            await send_telegram_message(
+                chat_id,
+                f"✅ Muvaffaqiyatli ulandingiz, <b>{user.full_name}</b>!\n"
+                f"Siz tizimda <b>{role_text}</b> sifatida ro'yxatdan o'tgansiz. "
+                f"Endi buyurtmalaringiz haqida shu yerga xabar kelib turadi.",
+            )
+        else:
+            new_user = User(
+                full_name=contact.get("first_name") or "Mijoz",
+                phone_number=phone,
+                role=UserRole.CLIENT,
+                telegram_id=str(chat_id),
+            )
+            db.add(new_user)
+            await db.commit()
+            await send_telegram_message(
+                chat_id,
+                "✅ Ro'yxatdan muvaffaqiyatli o'tdingiz!\n"
+                "Tez orada shu bot orqali to'g'ridan-to'g'ri buyurtma berish imkoniyati ham qo'shiladi.",
+            )
+        return {"ok": True}
+
+    return {"ok": True}
+
+
+@app.get("/telegram/set-webhook")
+async def telegram_set_webhook(request: Request, owner: User = Depends(require_owner)):
+    webhook_url = str(request.base_url).rstrip("/") + "/telegram/webhook"
+    result = await set_telegram_webhook(webhook_url)
+    return {"webhook_url": webhook_url, "telegram_response": result}
+
+
+# ROUTERLARNI ILOVAGA ULASH
 app.include_router(admin_router)
 app.include_router(settings_router)
 app.include_router(orders_router)
