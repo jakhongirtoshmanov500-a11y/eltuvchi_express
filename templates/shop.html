@@ -36,7 +36,7 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body id="main-body" class="theme-default min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-24 transition-colors duration-300">
+<body id="main-body" class="theme-default min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-32 transition-colors duration-300">
 
     <!-- Birinchi Kirganda Chiqadigan Splash / Welcome Screen -->
     <div id="splash-screen" class="fixed inset-0 bg-slate-900 z-50 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-500">
@@ -135,7 +135,7 @@
 
         // Mavzuni yuklash va saqlash
         function setTheme(themeName) {
-            document.getElementById("main-body").className = `${themeName} min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-24 transition-colors duration-300`;
+            document.getElementById("main-body").className = `${themeName} min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-32 transition-colors duration-300`;
             localStorage.setItem("app_theme", themeName);
             document.getElementById("theme-menu").classList.add("hidden");
         }
@@ -297,6 +297,7 @@
                         </button>
                     </div>
                 </div>`;
+            updateCartBar();
         }
 
         async function updateProfile() {
@@ -341,6 +342,7 @@
                 };
                 list.appendChild(btn);
             });
+            updateCartBar();
         }
 
         async function loadPartners() {
@@ -371,6 +373,7 @@
                         <i class="fa-solid fa-store-slash text-2xl text-sub mb-2"></i>
                         <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
                     </div>`;
+                updateCartBar();
                 return;
             }
             partners.forEach(p => {
@@ -388,6 +391,7 @@
                 card.onclick = () => loadProducts(p.id, p.name);
                 list.appendChild(card);
             });
+            updateCartBar();
         }
 
         async function changeCityPrompt() {
@@ -470,6 +474,7 @@
                         <i class="fa-solid fa-box-open text-2xl text-sub mb-2"></i>
                         <p class="text-xs text-sub font-medium">Mahsulot topilmadi.</p>
                     </div>`;
+                updateCartBar();
                 return;
             }
 
@@ -482,11 +487,12 @@
                         <div class="text-[11px] text-sub line-clamp-2 mt-0.5">${p.description || ""}</div>
                         <div class="text-xs font-black text-amber-600 mt-1.5">${p.price.toLocaleString()} so'm</div>
                     </div>
-                    <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p)})'>
+                    <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p).replace(/'/g, "&#39;")})'>
                         + Qo'shish
                     </button>`;
                 list.appendChild(row);
             });
+            updateCartBar();
         }
 
         function addToCart(product) {
@@ -498,7 +504,10 @@
         function updateCartBar() {
             const items = Object.values(cart);
             const bar = document.getElementById("cart-bar");
-            if (items.length === 0) { bar.classList.add("hidden"); return; }
+            if (items.length === 0) { 
+                bar.classList.add("hidden"); 
+                return; 
+            }
             const total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
             const count = items.reduce((s, i) => s + i.qty, 0);
             document.getElementById("cart-summary").textContent = `${count} ta mahsulot — ${total.toLocaleString()} so'm`;
@@ -507,6 +516,9 @@
 
         function openCart() {
             const items = Object.values(cart);
+            if (items.length === 0) return;
+
+            document.getElementById("cart-bar").classList.add("hidden");
             const app = document.getElementById("app");
             const originalTotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
 
@@ -532,7 +544,7 @@
                         <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all">
                     </div>
 
-                    <!-- Keshbek Islatish Toggle Switch -->
+                    <!-- Keshbek Ishlatish Toggle Switch -->
                     ${canUseCashback ? `
                     <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center">
                         <div>
@@ -593,7 +605,7 @@
             if (!cart[productId]) return;
             cart[productId].qty += delta;
             if (cart[productId].qty <= 0) delete cart[productId];
-            updateCartBar();
+            
             if (Object.keys(cart).length === 0) {
                 loadProducts(currentPartnerId, currentPartnerName);
             } else {
