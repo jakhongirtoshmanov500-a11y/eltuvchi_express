@@ -6,30 +6,47 @@
     <title>Eltuvchi Express</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 min-h-screen text-gray-800 antialiased selection:bg-indigo-500 selection:text-white pb-24">
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased selection:bg-amber-500 selection:text-white pb-24">
 
-    <!-- Asosiy konteyner -->
-    <div id="app" class="max-w-md mx-auto p-4">
-        <div id="loading" class="flex flex-col items-center justify-center py-20 space-y-3">
-            <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <p class="text-sm text-gray-500 font-medium">Yuklanmoqda...</p>
+    <!-- Brending Header / Logo -->
+    <header class="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2.5 cursor-pointer" onclick="goHome()">
+                <div class="w-10 h-10 bg-gradient-to-tr from-amber-500 to-amber-400 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-md shadow-amber-200">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <div class="font-black text-base text-slate-900 tracking-tight leading-none">ELTUVCHI</div>
+                    <div class="text-[10px] font-extrabold text-amber-500 tracking-widest leading-none mt-0.5">EXPRESS</div>
+                </div>
+            </div>
+            <button id="profile-btn" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-2xl flex items-center justify-center transition-all active:scale-95" onclick="openProfile()">
+                <i class="fa-solid fa-user-gear text-sm"></i>
+            </button>
         </div>
-    </div>
+    </header>
 
-    <!-- Pastda doim ko'rinadigan savat paneli -->
-    <div id="cart-bar" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-indigo-600 text-white p-4 rounded-2xl shadow-xl flex justify-between items-center cursor-pointer transition-all duration-300 active:scale-95 z-50" onclick="openCart()">
+    <!-- Asosiy Konteyner -->
+    <main id="app" class="max-w-md mx-auto p-4">
+        <div id="loading" class="flex flex-col items-center justify-center py-20 space-y-3">
+            <div class="w-9 h-9 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-xs font-semibold text-slate-400">Yuklanmoqda...</p>
+        </div>
+    </main>
+
+    <!-- Pastda Doim Ko'rinadigan Savat Paneli -->
+    <div id="cart-bar" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white p-3.5 rounded-2xl shadow-2xl flex justify-between items-center cursor-pointer transition-all duration-300 active:scale-95 z-50 border border-slate-800" onclick="openCart()">
         <div class="flex items-center space-x-3">
-            <div class="bg-indigo-500 p-2 rounded-xl">
-                <i class="fa-solid fa-cart-shopping text-lg"></i>
+            <div class="bg-amber-500 text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold shadow-md shadow-amber-500/30">
+                <i class="fa-solid fa-basket-shopping text-sm"></i>
             </div>
             <div>
-                <span id="cart-summary" class="font-bold text-sm block"></span>
-                <span class="text-xs text-indigo-200">Savatni ko'rish uchun bosing</span>
+                <span id="cart-summary" class="font-black text-sm block leading-tight"></span>
+                <span class="text-[11px] text-amber-400 font-medium">Buyurtmani rasmiylashtirish →</span>
             </div>
         </div>
-        <span class="font-bold text-sm bg-white text-indigo-600 px-3 py-1.5 rounded-lg shadow-sm">Savat →</span>
     </div>
 
     <script>
@@ -37,6 +54,7 @@
         if (tg) { tg.ready(); tg.expand(); }
         const initData = tg ? tg.initData : "";
 
+        let currentUser = null;
         let currentCityId = null;
         let currentCityName = "Shaharni tanlang";
         let allCities = [];
@@ -67,21 +85,23 @@
         function renderLoading(msg) {
             document.getElementById("app").innerHTML = `
                 <div class="flex flex-col items-center justify-center py-20 space-y-3">
-                    <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                    <p class="text-sm text-gray-500 font-medium">${msg}</p>
+                    <div class="w-9 h-9 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-xs font-semibold text-slate-400">${msg}</p>
                 </div>`;
         }
 
         function renderNeedsBotStart() {
+            document.getElementById("profile-btn").classList.add("hidden");
             document.getElementById("app").innerHTML = `
-                <div class="text-center py-16 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mt-6">
-                    <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
-                        <i class="fa-solid fa-user-check"></i>
+                <div class="text-center py-12 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 my-4">
+                    <div class="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
+                        <i class="fa-solid fa-id-card"></i>
                     </div>
-                    <p class="text-xl font-extrabold text-gray-900 mb-2">Xush kelibsiz!</p>
-                    <p class="text-sm text-gray-600 mb-6 leading-relaxed">Davom etish uchun botga qaytib <b>telefon raqamingizni</b> ulashing.</p>
-                    <div class="p-3 bg-indigo-50 rounded-xl text-xs text-indigo-700 font-medium">
-                        Bot chatiga qaytib, "📱 Telefon raqamni ulashish" tugmasini bosing.
+                    <h2 class="text-xl font-black text-slate-900 mb-2">Ro'yxatdan o'ting</h2>
+                    <p class="text-xs text-slate-500 mb-6 leading-relaxed">Xizmatlarimizdan foydalanish va buyurtma berish uchun, iltimos, bot orqali telefon raqamingizni tasdiqlang.</p>
+                    <div class="p-3.5 bg-slate-50 rounded-2xl text-xs text-slate-600 font-bold border border-slate-100 flex items-center space-x-2">
+                        <i class="fa-solid fa-paper-plane text-amber-500 text-sm"></i>
+                        <span>Bot chatiga qaytib, "📱 Telefon raqamni ulashish" tugmasini bosing.</span>
                     </div>
                 </div>`;
         }
@@ -93,11 +113,13 @@
             }
             try {
                 const me = await api("/me", {});
+                currentUser = me;
                 if (!me.registered) {
                     renderNeedsBotStart();
                     return;
                 }
                 
+                document.getElementById("profile-btn").classList.remove("hidden");
                 allCities = me.cities || [];
 
                 if (!me.city_id) {
@@ -113,18 +135,85 @@
             }
         }
 
+        function goHome() {
+            if (currentCityId) {
+                loadPartners();
+            } else if (allCities.length > 0) {
+                renderCitySelect(allCities);
+            }
+        }
+
+        function openProfile() {
+            if (!currentUser) return;
+            const app = document.getElementById("app");
+            const cashback = (currentUser.cashback_balance || 0).toLocaleString();
+            const refCode = currentUser.referral_code || "";
+            const refLink = `https://t.me/EltuvchiExpressBot?start=${refCode}`;
+
+            app.innerHTML = `
+                <div class="mb-4 flex items-center justify-between">
+                    <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-xl" onclick="goHome()">
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> Qaytish
+                    </button>
+                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Shaxsiy Kabinet</span>
+                </div>
+
+                <!-- Keshbek Kartochkasi -->
+                <div class="bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 text-white p-5 rounded-3xl shadow-xl mb-4 relative overflow-hidden border border-slate-700">
+                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 mb-1">Keshbek Balans</div>
+                    <div class="text-3xl font-black tracking-tight mb-4">${cashback} <span class="text-sm font-bold text-slate-300">so'm</span></div>
+                    <div class="flex items-center justify-between bg-white/10 backdrop-blur-md p-3 rounded-2xl text-xs font-medium border border-white/5">
+                        <span class="text-slate-300">Har bir buyurtmadan keshbek toplanadi</span>
+                        <i class="fa-solid fa-gift text-amber-400 text-sm"></i>
+                    </div>
+                </div>
+
+                <!-- Foydalanuvchi Ma'lumotlari -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Ism:</span>
+                        <span class="text-xs font-bold text-slate-800">${currentUser.first_name || 'Kiritilmagan'}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Tug'ilgan kun:</span>
+                        <span class="text-xs font-bold text-slate-800">${currentUser.birth_date || 'Kiritilmagan'}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-semibold text-slate-400">Telefon:</span>
+                        <span class="text-xs font-bold text-slate-800">${currentUser.phone || '—'}</span>
+                    </div>
+                </div>
+
+                <!-- Referal Tizimi -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4">
+                    <label class="block text-xs font-bold text-slate-800 mb-1.5">🎁 Do'stlarni taklif qiling</label>
+                    <p class="text-[11px] text-slate-400 mb-3">Sizning referal havolangiz orqali kirgan do'stlaringiz uchun bonus olasiz.</p>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="${refLink}" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none">
+                        <button onclick="copyLink('${refLink}')" class="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200">
+                            Nusxalash
+                        </button>
+                    </div>
+                </div>`;
+        }
+
+        function copyLink(text) {
+            navigator.clipboard.writeText(text);
+            alert("Referal havola nusxalandi!");
+        }
+
         function renderCitySelect(cities) {
             document.getElementById("app").innerHTML = `
-                <div class="mb-6">
-                    <h1 class="text-2xl font-black text-gray-900 tracking-tight">📍 Shaharingizni tanlang</h1>
-                    <p class="text-xs text-gray-500 mt-1">Xizmat ko'rsatish hududini belgilang</p>
+                <div class="mb-5">
+                    <h1 class="text-xl font-black text-slate-900 tracking-tight">📍 Shaharni tanlang</h1>
+                    <p class="text-xs text-slate-400 mt-0.5">Xizmat ko'rsatilish hududini belgilang</p>
                 </div>
-                <div class="space-y-2.5" id="city-list"></div>`;
+                <div class="space-y-2" id="city-list"></div>`;
             const list = document.getElementById("city-list");
             cities.forEach(c => {
                 const btn = document.createElement("button");
-                btn.className = "w-full text-left p-4 bg-white active:bg-gray-50 rounded-2xl shadow-sm border border-gray-100 font-bold text-gray-800 flex justify-between items-center transition-all duration-200 active:scale-[0.99]";
-                btn.innerHTML = `<span>${c.name}</span><i class="fa-solid fa-chevron-right text-xs text-gray-400"></i>`;
+                btn.className = "w-full text-left p-4 bg-white active:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-800 flex justify-between items-center transition-all active:scale-[0.99]";
+                btn.innerHTML = `<span>${c.name}</span><i class="fa-solid fa-chevron-right text-xs text-slate-300"></i>`;
                 btn.onclick = async () => {
                     await api("/set-city", { city_id: c.id });
                     currentCityId = c.id;
@@ -141,38 +230,39 @@
             const app = document.getElementById("app");
             
             app.innerHTML = `
-                <!-- Shaharni almashtirish paneli -->
-                <div class="flex justify-between items-center bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 mb-5">
-                    <div class="flex items-center space-x-2.5 overflow-hidden">
-                        <i class="fa-solid fa-location-dot text-indigo-600 text-lg"></i>
-                        <span class="font-bold text-sm text-gray-800 truncate">${currentCityName}</span>
+                <div class="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-100 mb-4">
+                    <div class="flex items-center space-x-2 overflow-hidden">
+                        <div class="w-7 h-7 bg-amber-50 text-amber-500 rounded-lg flex items-center justify-center text-xs">
+                            <i class="fa-solid fa-location-dot"></i>
+                        </div>
+                        <span class="font-bold text-xs text-slate-800 truncate">${currentCityName}</span>
                     </div>
-                    <button onclick="changeCityPrompt()" class="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all">
+                    <button onclick="changeCityPrompt()" class="text-[11px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-xl transition-all">
                         O'zgartirish
                     </button>
                 </div>
 
-                <h1 class="text-xl font-black text-gray-900 mb-3">🏪 Muassasalar</h1>
-                <div class="space-y-3" id="partner-list"></div>`;
+                <h1 class="text-lg font-black text-slate-900 mb-3">🏪 Muassasalar</h1>
+                <div class="space-y-2.5" id="partner-list"></div>`;
 
             const list = document.getElementById("partner-list");
             if (partners.length === 0) {
                 list.innerHTML = `
-                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 p-4">
-                        <i class="fa-solid fa-store-slash text-3xl text-gray-300 mb-2"></i>
-                        <p class="text-sm text-gray-500 font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
+                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-4">
+                        <i class="fa-solid fa-store-slash text-2xl text-slate-300 mb-2"></i>
+                        <p class="text-xs text-slate-400 font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
                     </div>`;
                 return;
             }
             partners.forEach(p => {
                 const card = document.createElement("button");
-                card.className = "w-full text-left p-4 bg-white rounded-2xl shadow-sm border border-gray-100 active:bg-gray-50 transition-all duration-200 active:scale-[0.99]";
+                card.className = "w-full text-left p-4 bg-white rounded-2xl shadow-sm border border-slate-100 active:bg-slate-50 transition-all duration-200 active:scale-[0.99]";
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-1">
-                        <div class="font-extrabold text-base text-gray-900">${p.name}</div>
-                        <span class="text-[10px] uppercase font-bold tracking-wider bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">${p.category || "Restoran"}</span>
+                        <div class="font-black text-sm text-slate-900">${p.name}</div>
+                        <span class="text-[9px] uppercase font-bold tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${p.category || "Restoran"}</span>
                     </div>
-                    <div class="text-xs text-gray-400 flex items-center space-x-1">
+                    <div class="text-xs text-slate-400 flex items-center space-x-1">
                         <i class="fa-solid fa-map-pin text-[10px]"></i>
                         <span class="truncate">${p.address || "Manzil ko'rsatilmagan"}</span>
                     </div>`;
@@ -182,11 +272,8 @@
         }
 
         async function changeCityPrompt() {
-            if (allCities.length === 0) {
-                try {
-                    const me = await api("/me", {});
-                    allCities = me.cities || [];
-                } catch (e) {}
+            if (allCities.length === 0 && currentUser) {
+                allCities = currentUser.cities || [];
             }
             renderCitySelect(allCities);
         }
@@ -198,30 +285,30 @@
             products = await apiGet(`/products?partner_id=${partnerId}`);
             const app = document.getElementById("app");
             app.innerHTML = `
-                <button class="flex items-center text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl mb-4" onclick="loadPartners()">
+                <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadPartners()">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Do'konlarga qaytish
                 </button>
-                <h1 class="text-2xl font-black text-gray-900 mb-4">${partnerName}</h1>
-                <div class="space-y-3" id="product-list"></div>`;
+                <h1 class="text-xl font-black text-slate-900 mb-3">${partnerName}</h1>
+                <div class="space-y-2.5" id="product-list"></div>`;
 
             const list = document.getElementById("product-list");
             if (products.length === 0) {
                 list.innerHTML = `
-                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 p-4">
-                        <i class="fa-solid fa-box-open text-3xl text-gray-300 mb-2"></i>
-                        <p class="text-sm text-gray-500 font-medium">Bu do'konda hozircha mahsulot yo'q.</p>
+                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-4">
+                        <i class="fa-solid fa-box-open text-2xl text-slate-300 mb-2"></i>
+                        <p class="text-xs text-slate-400 font-medium">Bu do'konda hozircha mahsulot yo'q.</p>
                     </div>`;
             }
             products.forEach(p => {
                 const row = document.createElement("div");
-                row.className = "p-4 bg-white rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center space-x-3";
+                row.className = "p-3.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center space-x-3";
                 row.innerHTML = `
                     <div class="flex-1 min-w-0">
-                        <div class="font-bold text-sm text-gray-900 truncate">${p.name}</div>
-                        <div class="text-xs text-gray-400 line-clamp-2 mt-0.5">${p.description || ""}</div>
-                        <div class="text-sm font-black text-indigo-600 mt-2">${p.price.toLocaleString()} so'm</div>
+                        <div class="font-bold text-xs text-slate-900 truncate">${p.name}</div>
+                        <div class="text-[11px] text-slate-400 line-clamp-2 mt-0.5">${p.description || ""}</div>
+                        <div class="text-xs font-black text-amber-600 mt-1.5">${p.price.toLocaleString()} so'm</div>
                     </div>
-                    <button class="bg-indigo-600 active:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p)})'>
+                    <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p)})'>
                         + Qo'shish
                     </button>`;
                 list.appendChild(row);
@@ -250,38 +337,38 @@
             const app = document.getElementById("app");
             const total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
             app.innerHTML = `
-                <button class="flex items-center text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl mb-4" onclick="loadProducts(currentPartnerId, currentPartnerName)">
+                <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadProducts(currentPartnerId, currentPartnerName)">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Menyuga qaytish
                 </button>
-                <h1 class="text-2xl font-black text-gray-900 mb-4">🛒 Savatingiz</h1>
-                <div class="space-y-2.5 mb-5" id="cart-items"></div>
+                <h1 class="text-xl font-black text-slate-900 mb-3">🛒 Savatingiz</h1>
+                <div class="space-y-2 mb-4" id="cart-items"></div>
                 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-5 space-y-3">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Yetkazib berish manzili</label>
-                        <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-600 transition-all">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Yetkazib berish manzili</label>
+                        <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-amber-500 transition-all">
                     </div>
-                    <div class="border-t border-gray-100 pt-3 flex justify-between items-center font-bold">
-                        <span class="text-sm text-gray-600">Jami summa:</span>
-                        <span class="text-lg text-indigo-600 font-black">${total.toLocaleString()} so'm</span>
+                    <div class="border-t border-slate-100 pt-3 flex justify-between items-center font-bold">
+                        <span class="text-xs text-slate-500">Jami summa:</span>
+                        <span class="text-base text-amber-600 font-black">${total.toLocaleString()} so'm</span>
                     </div>
                 </div>
 
-                <button onclick="placeOrder()" class="w-full bg-green-600 active:bg-green-700 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-green-100 transition-all active:scale-[0.98] flex justify-center items-center space-x-2">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Buyurtmani tasdiqlash</span>
+                <button onclick="placeOrder()" class="w-full bg-slate-900 active:bg-slate-800 text-white py-3.5 rounded-2xl font-bold shadow-xl transition-all active:scale-[0.98] flex justify-center items-center space-x-2">
+                    <i class="fa-solid fa-circle-check text-amber-400"></i>
+                    <span class="text-xs">Buyurtmani tasdiqlash</span>
                 </button>`;
 
             const list = document.getElementById("cart-items");
             items.forEach(i => {
                 const row = document.createElement("div");
-                row.className = "p-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center";
+                row.className = "p-3 bg-white rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center";
                 row.innerHTML = `
-                    <div class="text-sm font-bold text-gray-800">${i.product.name}</div>
+                    <div class="text-xs font-bold text-slate-800">${i.product.name}</div>
                     <div class="flex items-center space-x-2">
-                        <button class="w-8 h-8 bg-gray-100 active:bg-gray-200 rounded-xl font-bold text-gray-700 transition-all flex items-center justify-center" onclick="changeQty(${i.product.id}, -1)">−</button>
-                        <span class="text-sm font-bold w-6 text-center text-gray-900">${i.qty}</span>
-                        <button class="w-8 h-8 bg-gray-100 active:bg-gray-200 rounded-xl font-bold text-gray-700 transition-all flex items-center justify-center" onclick="changeQty(${i.product.id}, 1)">+</button>
+                        <button class="w-7 h-7 bg-slate-100 active:bg-slate-200 rounded-lg font-bold text-slate-700 transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, -1)">−</button>
+                        <span class="text-xs font-bold w-5 text-center text-slate-900">${i.qty}</span>
+                        <button class="w-7 h-7 bg-slate-100 active:bg-slate-200 rounded-lg font-bold text-slate-700 transition-all flex items-center justify-center text-xs" onclick="changeQty(${i.product.id}, 1)">+</button>
                     </div>`;
                 list.appendChild(row);
             });
@@ -306,13 +393,13 @@
             try {
                 const result = await api("/order", { partner_id: currentPartnerId, delivery_address: address, items });
                 document.getElementById("app").innerHTML = `
-                    <div class="text-center py-16 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mt-6">
-                        <div class="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                    <div class="text-center py-16 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 my-4">
+                        <div class="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
                             <i class="fa-solid fa-circle-check"></i>
                         </div>
-                        <p class="text-2xl font-black text-gray-900 mb-1">Buyurtma qabul qilindi!</p>
-                        <p class="text-xs text-gray-400 font-medium mb-4">Buyurtma raqami: #${result.order_id}</p>
-                        <p class="text-xs text-gray-500">Tez orada kuryerimiz siz bilan bog'lanadi.</p>
+                        <h2 class="text-xl font-black text-slate-900 mb-1">Buyurtma qabul qilindi!</h2>
+                        <p class="text-xs text-slate-400 font-medium mb-3">Buyurtma raqami: #${result.order_id}</p>
+                        <p class="text-xs text-slate-500">Tez orada kuryerimiz siz bilan bog'lanadi.</p>
                     </div>`;
                 document.getElementById("cart-bar").classList.add("hidden");
                 cart = {};
