@@ -438,6 +438,7 @@
                         <tr class="border-b text-xs">
                             <th class="p-2">Ism</th>
                             <th class="p-2">Telefon</th>
+                            {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
                             <th class="p-2">Buyurtmalar soni</th>
                             <th class="p-2">Umumiy xarajat</th>
                             <th class="p-2 text-center">Holat</th>
@@ -449,6 +450,7 @@
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
                             <td class="p-2 font-medium">{{ client.full_name }}</td>
                             <td class="p-2 text-xs">{{ client.phone_number }}</td>
+                            {% if is_owner %}<td class="p-2 text-xs">{{ client.city.name if client.city else '—' }}</td>{% endif %}
                             <td class="p-2 text-center">{{ order_count }}</td>
                             <td class="p-2 text-xs font-semibold text-green-700">{{ "%.0f"|format(total_spent) }} so'm</td>
                             <td class="p-2 text-center">
@@ -466,7 +468,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
+                            <td colspan="7" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Eltuvchi Express</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen pb-24">
+
+    <div id="app" class="max-w-lg mx-auto p-4">
+        <div id="loading" class="text-center py-20 text-gray-400">Yuklanmoqda...</div>
+    </div>
+
+    <!-- Pastda doim ko'rinadigan savat paneli -->
+    <div id="cart-bar" class="hidden fixed bottom-0 left-0 right-0 bg-indigo-600 text-white p-4 flex justify-between items-center shadow-lg cursor-pointer" onclick="openCart()">
+        <span id="cart-summary" class="font-semibold text-sm"></span>
+        <span class="font-bold">Savat →</span>
+    </div>
+
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.ready(); tg.expand(); }
+        const initData = tg ? tg.initData : "";
+
+        let currentCityId = null;
+        let currentPartnerId = null;
+        let currentPartnerName = "";
+        let products = [];
+        let cart = {}; // { product_id: {product, qty} }
+
+        async function api(path, body) {
+            const res = await fetch(`/api/shop${path}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ init_data: initData, ...body }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: "Xatolik" }));
+                throw new Error(err.detail || "Xatolik yuz berdi");
+            }
+            return res.json();
+        }
+
+        async function apiGet(path) {
+            const res = await fetch(`/api/shop${path}`);
+            if (!res.ok) throw new Error("Xatolik yuz berdi");
+            return res.json();
+        }
+
+        function renderLoading(msg) {
+            document.getElementById("app").innerHTML = `<div class="text-center py-20 text-gray-400">${msg}</div>`;
+        }
+
+        function renderNeedsBotStart() {
+            document.getElementById("app").innerHTML = `
+                <div class="text-center py-16">
+                    <p class="text-lg font-bold mb-2">👋 Xush kelibsiz!</p>
+                    <p class="text-sm text-gray-500 mb-4">Davom etishdan oldin, iltimos, botga qaytib <b>telefon raqamingizni</b> ulashing.</p>
+                    <p class="text-xs text-gray-400">Bot chatiga qaytib, "📱 Telefon raqamni ulashish" tugmasini bosing.</p>
+                </div>`;
+        }
+
+        async function init() {
+            if (!tg || !initData) {
+                renderLoading("Bu sahifa faqat Telegram ilovasi ichida ishlaydi.");
+                return;
+            }
+            try {
+                const me = await api("/me", {});
+                if (!me.registered) {
+                    renderNeedsBotStart();
+                    return;
+                }
+                if (!me.city_id) {
+                    renderCitySelect(me.cities);
+                } else {
+                    currentCityId = me.city_id;
+                    await loadPartners();
+                }
+            } catch (e) {
+                renderLoading("Xatolik: " + e.message);
+            }
+        }
+
+        function renderCitySelect(cities) {
+            document.getElementById("app").innerHTML = `
+                <h1 class="text-lg font-bold mb-4">Shaharni tanlang</h1>
+                <div class="space-y-2" id="city-list"></div>`;
+            const list = document.getElementById("city-list");
+            cities.forEach(c => {
+                const btn = document.createElement("button");
+                btn.className = "w-full text-left p-4 bg-white rounded-xl shadow border font-semibold";
+                btn.textContent = c.name;
+                btn.onclick = async () => {
+                    await api("/set-city", { city_id: c.id });
+                    currentCityId = c.id;
+                    await loadPartners();
+                };
+                list.appendChild(btn);
+            });
+        }
+
+        async function loadPartners() {
+            renderLoading("Do'konlar yuklanmoqda...");
+            const partners = await apiGet(`/partners?city_id=${currentCityId}`);
+            const app = document.getElementById("app");
+            app.innerHTML = `<h1 class="text-lg font-bold mb-4">🏪 Do'konlar</h1><div class="space-y-2" id="partner-list"></div>`;
+            const list = document.getElementById("partner-list");
+            if (partners.length === 0) {
+                list.innerHTML = `<p class="text-sm text-gray-400">Hozircha bu shaharda ochiq do'kon yo'q.</p>`;
+                return;
+            }
+            partners.forEach(p => {
+                const card = document.createElement("button");
+                card.className = "w-full text-left p-4 bg-white rounded-xl shadow border";
+                card.innerHTML = `<div class="font-bold">${p.name}</div><div class="text-xs text-gray-400">${p.category} · ${p.address}</div>`;
+                card.onclick = () => loadProducts(p.id, p.name);
+                list.appendChild(card);
+            });
+        }
+
+        async function loadProducts(partnerId, partnerName) {
+            currentPartnerId = partnerId;
+            currentPartnerName = partnerName;
+            renderLoading("Menyu yuklanmoqda...");
+            products = await apiGet(`/products?partner_id=${partnerId}`);
+            const app = document.getElementById("app");
+            app.innerHTML = `
+                <button class="text-xs text-indigo-600 font-semibold mb-3" onclick="loadPartners()">← Do'konlarga qaytish</button>
+                <h1 class="text-lg font-bold mb-4">${partnerName}</h1>
+                <div class="space-y-2" id="product-list"></div>`;
+            const list = document.getElementById("product-list");
+            if (products.length === 0) {
+                list.innerHTML = `<p class="text-sm text-gray-400">Bu do'konda hozircha mahsulot yo'q.</p>`;
+            }
+            products.forEach(p => {
+                const row = document.createElement("div");
+                row.className = "p-3 bg-white rounded-xl shadow border flex justify-between items-center";
+                row.innerHTML = `
+                    <div>
+                        <div class="font-semibold text-sm">${p.name}</div>
+                        <div class="text-xs text-gray-400">${p.description || ""}</div>
+                        <div class="text-sm font-bold text-indigo-600 mt-1">${p.price.toLocaleString()} so'm</div>
+                    </div>
+                    <button class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold" onclick='addToCart(${JSON.stringify(p)})'>+ Qo'shish</button>`;
+                list.appendChild(row);
+            });
+            updateCartBar();
+        }
+
+        function addToCart(product) {
+            if (!cart[product.id]) cart[product.id] = { product, qty: 0 };
+            cart[product.id].qty += 1;
+            updateCartBar();
+        }
+
+        function updateCartBar() {
+            const items = Object.values(cart);
+            const bar = document.getElementById("cart-bar");
+            if (items.length === 0) { bar.classList.add("hidden"); return; }
+            const total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
+            const count = items.reduce((s, i) => s + i.qty, 0);
+            document.getElementById("cart-summary").textContent = `${count} ta mahsulot — ${total.toLocaleString()} so'm`;
+            bar.classList.remove("hidden");
+        }
+
+        function openCart() {
+            const items = Object.values(cart);
+            const app = document.getElementById("app");
+            const total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
+            app.innerHTML = `
+                <button class="text-xs text-indigo-600 font-semibold mb-3" onclick="loadProducts(currentPartnerId, currentPartnerName)">← Menyuga qaytish</button>
+                <h1 class="text-lg font-bold mb-4">🛒 Savat</h1>
+                <div class="space-y-2" id="cart-items"></div>
+                <div class="mt-4">
+                    <label class="block text-xs font-medium mb-1">Yetkazish manzili</label>
+                    <input id="delivery-address" type="text" placeholder="Ko'cha, uy raqami..." class="w-full p-3 border rounded-lg text-sm">
+                </div>
+                <div class="mt-4 flex justify-between font-bold">
+                    <span>Jami:</span><span>${total.toLocaleString()} so'm</span>
+                </div>
+                <button onclick="placeOrder()" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold mt-4">✅ Buyurtma berish</button>`;
+            const list = document.getElementById("cart-items");
+            items.forEach(i => {
+                const row = document.createElement("div");
+                row.className = "p-3 bg-white rounded-xl shadow border flex justify-between items-center";
+                row.innerHTML = `
+                    <div class="text-sm font-semibold">${i.product.name}</div>
+                    <div class="flex items-center gap-2">
+                        <button class="w-7 h-7 bg-gray-200 rounded-full font-bold" onclick="changeQty(${i.product.id}, -1)">−</button>
+                        <span class="text-sm w-5 text-center">${i.qty}</span>
+                        <button class="w-7 h-7 bg-gray-200 rounded-full font-bold" onclick="changeQty(${i.product.id}, 1)">+</button>
+                    </div>`;
+                list.appendChild(row);
+            });
+        }
+
+        function changeQty(productId, delta) {
+            if (!cart[productId]) return;
+            cart[productId].qty += delta;
+            if (cart[productId].qty <= 0) delete cart[productId];
+            updateCartBar();
+            openCart();
+        }
+
+        async function placeOrder() {
+            const address = document.getElementById("delivery-address").value.trim();
+            if (!address) { alert("Iltimos, yetkazish manzilini kiriting"); return; }
+            const items = Object.values(cart).map(i => ({ product_id: i.product.id, quantity: i.qty }));
+            try {
+                const result = await api("/order", { partner_id: currentPartnerId, delivery_address: address, items });
+                document.getElementById("app").innerHTML = `
+                    <div class="text-center py-16">
+                        <p class="text-xl font-bold mb-2">✅ Buyurtma qabul qilindi!</p>
+                        <p class="text-sm text-gray-500">Buyurtma raqami: #${result.order_id}</p>
+                    </div>`;
+                document.getElementById("cart-bar").classList.add("hidden");
+                cart = {};
+                if (tg) setTimeout(() => tg.close(), 2500);
+            } catch (e) {
+                alert("Xatolik: " + e.message);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
