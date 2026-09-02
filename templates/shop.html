@@ -7,6 +7,11 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Swiper.js Slider uchun -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
     <style>
         /* Maxsus Fon Mavzulari */
         body.theme-default { background-color: #f8fafc; color: #0f172a; }
@@ -23,7 +28,7 @@
         body.theme-gold .text-title { color: #713f12; }
         body.theme-gold .text-sub { color: #a16207; }
 
-        body.theme-green .card-bg { background-color: #dc26260d; background-color: #ffffff; border-color: #bbf7d0; }
+        body.theme-green .card-bg { background-color: #ffffff; border-color: #bbf7d0; }
         body.theme-green .text-title { color: #14532d; }
         body.theme-green .text-sub { color: #15803d; }
 
@@ -34,6 +39,8 @@
         /* No-scrollbar yordamchi CSS */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .swiper-pagination-bullet-active { background: #f59e0b !important; }
     </style>
 </head>
 <body id="main-body" class="theme-default min-h-screen antialiased selection:bg-amber-500 selection:text-white pb-32 transition-colors duration-300">
@@ -61,6 +68,11 @@
             </div>
             
             <div class="flex items-center space-x-2">
+                <!-- Sevimlilar Tugmasi -->
+                <button onclick="renderFavorites()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 w-9 h-9 rounded-2xl flex items-center justify-center transition-all active:scale-95 relative">
+                    <i class="fa-solid fa-heart text-rose-500 text-sm"></i>
+                    <span id="fav-badge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">0</span>
+                </button>
                 <!-- Fon Rangini O'zgartirish Tugmasi -->
                 <button onclick="toggleThemeMenu()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 w-9 h-9 rounded-2xl flex items-center justify-center transition-all active:scale-95">
                     <i class="fa-solid fa-palette text-sm"></i>
@@ -94,7 +106,7 @@
     </header>
 
     <!-- Asosiy Konteyner -->
-    <main id="app" class="max-w-md mx-auto p-4">
+    <main id="app" class="max-w-md mx-auto p-4 space-y-3">
         <div id="loading" class="flex flex-col items-center justify-center py-20 space-y-3">
             <div class="w-9 h-9 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
             <p class="text-xs font-semibold text-slate-400">Yuklanmoqda...</p>
@@ -127,6 +139,15 @@
         let currentPartnerName = "";
         let products = [];
         let cart = {};
+
+        // Yangi Qo'shimchalar uchun State Management
+        let favorites = JSON.parse(localStorage.getItem('fav_items') || '[]');
+        let orderType = 'delivery'; // 'delivery' yoki 'pickup'
+        let paymentMethod = 'cash'; // 'cash', 'click', 'payme', 'cashback'
+        let promoCode = '';
+        let promoDiscountPercent = 0;
+        let orderComment = '';
+        let userLocation = null;
 
         // Filtr va Keshbek holatlari
         let selectedCategory = "Barchasi";
@@ -191,7 +212,7 @@
         }
 
         async function init() {
-            // Splash Screenni yopish (1.5 soniyadan keyin)
+            // Splash Screenni yopish
             setTimeout(() => {
                 const splash = document.getElementById("splash-screen");
                 if (splash) {
@@ -226,6 +247,7 @@
             } catch (e) {
                 renderLoading("Xatolik: " + e.message);
             }
+            updateFavBadge();
         }
 
         function goHome() {
@@ -265,11 +287,31 @@
                     </div>
                 </div>
 
+                <!-- Live Buyurtma Tarixi Statusi -->
+                <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
+                    <h3 class="text-xs font-black text-title uppercase tracking-wider mb-2">Buyurtmalar Tarixi va Holati</h3>
+                    <div class="space-y-2">
+                        <div class="p-3 bg-slate-500/5 rounded-xl border border-slate-100">
+                            <div class="flex justify-between items-center mb-1.5">
+                                <span class="text-xs font-bold text-title">Buyurtma #1084</span>
+                                <span class="text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-md">🛵 Kuryer yo'lda</span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-1.5">
+                                <div class="bg-amber-500 h-full w-3/4"></div>
+                            </div>
+                            <div class="text-[11px] text-sub flex justify-between">
+                                <span>Fast Food Express</span>
+                                <span class="font-bold text-title">70,000 so'm</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Foydalanuvchi Ma'lumotlarini Tahrirlash -->
                 <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
                     <h3 class="text-xs font-black text-title uppercase tracking-wider mb-2">Shaxsiy Ma'lumotlar</h3>
                     <div>
-                        <label class="block text-[11px] font-semibold text-sub mb-1">Telefon raqam (O'zgartirib bo'lmaydi)</label>
+                        <label class="block text-[11px] font-semibold text-sub mb-1">Telefon raqam</label>
                         <input type="text" readonly value="${userPhone}" class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-sub focus:outline-none cursor-not-allowed">
                     </div>
                     <div>
@@ -351,7 +393,24 @@
             const app = document.getElementById("app");
             
             app.innerHTML = `
-                <div class="flex justify-between items-center card-bg p-3 rounded-2xl shadow-sm border mb-4">
+                <!-- 1. Swiper Banner Slider -->
+                <div class="swiper mySwiper rounded-3xl shadow-sm overflow-hidden border mb-2">
+                    <div class="swiper-wrapper">
+                        <div class="swiper-slide bg-gradient-to-r from-amber-500 to-amber-600 p-5 text-white">
+                            <span class="bg-white/20 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">Aksiya</span>
+                            <h3 class="text-lg font-black mt-1">Bepul Yetkazib Berish!</h3>
+                            <p class="text-xs text-amber-100 mt-0.5">Dastlabki 3 ta buyurtmangiz uchun kuryerlik 0 so'm.</p>
+                        </div>
+                        <div class="swiper-slide bg-gradient-to-r from-slate-900 to-slate-800 p-5 text-white">
+                            <span class="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">Promo-kod</span>
+                            <h3 class="text-lg font-black mt-1">PROMO10 Bilan 10% Chegirma</h3>
+                            <p class="text-xs text-slate-300 mt-0.5">Savatda kodingizni kiriting va chegirmaga ega bo'ling.</p>
+                        </div>
+                    </div>
+                    <div class="swiper-pagination"></div>
+                </div>
+
+                <div class="flex justify-between items-center card-bg p-3 rounded-2xl shadow-sm border">
                     <div class="flex items-center space-x-2 overflow-hidden">
                         <div class="w-7 h-7 bg-amber-50 text-amber-500 rounded-lg flex items-center justify-center text-xs">
                             <i class="fa-solid fa-location-dot"></i>
@@ -363,32 +422,46 @@
                     </button>
                 </div>
 
-                <h1 class="text-lg font-black text-title mb-3">🏪 Muassasalar</h1>
+                <h1 class="text-lg font-black text-title pt-1">🏪 Muassasalar</h1>
                 <div class="space-y-2.5" id="partner-list"></div>`;
+
+            new Swiper(".mySwiper", {
+                autoplay: { delay: 3500, disableOnInteraction: false },
+                pagination: { el: ".swiper-pagination", clickable: true },
+            });
 
             const list = document.getElementById("partner-list");
             if (partners.length === 0) {
                 list.innerHTML = `
                     <div class="text-center py-12 card-bg rounded-2xl border border-dashed p-4">
                         <i class="fa-solid fa-store-slash text-2xl text-sub mb-2"></i>
-                        <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
+                        <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochoq do'kon yo'q.</p>
                     </div>`;
                 updateCartBar();
                 return;
             }
             partners.forEach(p => {
+                const isOpen = p.is_open !== false; // Ish vaqti belgisi
                 const card = document.createElement("button");
-                card.className = "w-full text-left p-4 card-bg rounded-2xl shadow-sm border transition-all duration-200 active:scale-[0.99]";
+                card.className = `w-full text-left p-4 card-bg rounded-2xl shadow-sm border transition-all duration-200 ${isOpen ? 'active:scale-[0.99]' : 'opacity-60 cursor-not-allowed'}`;
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-1">
-                        <div class="font-black text-sm text-title">${p.name}</div>
-                        <span class="text-[9px] uppercase font-bold tracking-wider bg-slate-500/10 text-title px-2 py-0.5 rounded-md">${p.category || "Restoran"}</span>
+                        <div class="font-black text-sm text-title flex items-center space-x-1.5">
+                            <span>${p.name}</span>
+                            <span class="w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+                        </div>
+                        <span class="text-[9px] uppercase font-bold tracking-wider ${isOpen ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'} px-2 py-0.5 rounded-md">
+                            ${isOpen ? 'Ochiq' : 'Hozir Yopiq'}
+                        </span>
                     </div>
                     <div class="text-xs text-sub flex items-center space-x-1">
                         <i class="fa-solid fa-map-pin text-[10px]"></i>
                         <span class="truncate">${p.address || "Manzil ko'rsatilmagan"}</span>
                     </div>`;
-                card.onclick = () => loadProducts(p.id, p.name);
+                
+                if (isOpen) {
+                    card.onclick = () => loadProducts(p.id, p.name);
+                }
                 list.appendChild(card);
             });
             updateCartBar();
@@ -416,8 +489,6 @@
 
         function renderProductInterface() {
             const app = document.getElementById("app");
-
-            // Kategoriyalarni yig'ib olish
             const categories = ["Barchasi", ...new Set(products.map(p => p.category || "Boshqa"))];
 
             app.innerHTML = `
@@ -479,17 +550,41 @@
             }
 
             filtered.forEach(p => {
+                const qty = cart[p.id]?.qty || 0;
+                const isFav = favorites.includes(p.id);
+                const imgUrl = p.image_url || `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&q=80`;
+
                 const row = document.createElement("div");
-                row.className = "p-3.5 card-bg rounded-2xl shadow-sm border flex justify-between items-center space-x-3";
+                row.className = "p-3 card-bg rounded-2xl shadow-sm border flex items-center space-x-3";
                 row.innerHTML = `
+                    <!-- Lazy Loading Rasm -->
+                    <img src="${imgUrl}" loading="lazy" alt="${p.name}" class="w-16 h-16 object-cover rounded-xl bg-slate-100 flex-shrink-0">
+                    
                     <div class="flex-1 min-w-0">
-                        <div class="font-bold text-xs text-title truncate">${p.name}</div>
-                        <div class="text-[11px] text-sub line-clamp-2 mt-0.5">${p.description || ""}</div>
-                        <div class="text-xs font-black text-amber-600 mt-1.5">${p.price.toLocaleString()} so'm</div>
+                        <div class="flex justify-between items-start">
+                            <div class="font-bold text-xs text-title truncate pr-1">${p.name}</div>
+                            <button onclick="toggleFav(${p.id})" class="text-xs ${isFav ? 'text-rose-500' : 'text-slate-300'}">
+                                <i class="fa-solid fa-heart"></i>
+                            </button>
+                        </div>
+                        <div class="text-[11px] text-sub line-clamp-1 mt-0.5">${p.description || ""}</div>
+                        <div class="text-xs font-black text-amber-600 mt-1">${p.price.toLocaleString()} so'm</div>
                     </div>
-                    <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95 flex-shrink-0" onclick='addToCart(${JSON.stringify(p).replace(/'/g, "&#39;")})'>
-                        + Qo'shish
-                    </button>`;
+
+                    <!-- Inline + / - Badge Kontroli -->
+                    <div class="flex-shrink-0 flex items-center">
+                        ${qty === 0 ? `
+                            <button class="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all active:scale-95" onclick='addToCart(${JSON.stringify(p).replace(/'/g, "&#39;")})'>
+                                + Qo'shish
+                            </button>
+                        ` : `
+                            <div class="flex items-center space-x-1.5 bg-slate-500/10 p-1 rounded-xl">
+                                <button onclick="changeQty(${p.id}, -1)" class="w-6 h-6 bg-white rounded-lg text-xs font-bold text-title shadow-sm flex items-center justify-center">−</button>
+                                <span class="text-xs font-bold w-4 text-center text-title">${qty}</span>
+                                <button onclick="changeQty(${p.id}, 1)" class="w-6 h-6 bg-amber-500 rounded-lg text-xs font-bold text-white shadow-sm flex items-center justify-center">+</button>
+                            </div>
+                        `}
+                    </div>`;
                 list.appendChild(row);
             });
             updateCartBar();
@@ -498,7 +593,55 @@
         function addToCart(product) {
             if (!cart[product.id]) cart[product.id] = { product, qty: 0 };
             cart[product.id].qty += 1;
-            updateCartBar();
+            filterAndRenderProducts();
+        }
+
+        function toggleFav(id) {
+            if (favorites.includes(id)) {
+                favorites = favorites.filter(i => i !== id);
+            } else {
+                favorites.push(id);
+            }
+            localStorage.setItem('fav_items', JSON.stringify(favorites));
+            filterAndRenderProducts();
+            updateFavBadge();
+        }
+
+        function updateFavBadge() {
+            const badge = document.getElementById("fav-badge");
+            if (favorites.length > 0) {
+                badge.textContent = favorites.length;
+                badge.classList.remove("hidden");
+            } else {
+                badge.classList.add("hidden");
+            }
+        }
+
+        function renderFavorites() {
+            const app = document.getElementById("app");
+            const favProducts = products.filter(p => favorites.includes(p.id));
+
+            app.innerHTML = `
+                <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="goHome()">
+                    <i class="fa-solid fa-arrow-left mr-1.5"></i> Qaytish
+                </button>
+                <h1 class="text-xl font-black text-title mb-3">❤️ Sevimlilar</h1>
+                <div class="space-y-2.5" id="fav-list"></div>`;
+
+            const list = document.getElementById("fav-list");
+            if (favProducts.length === 0) {
+                list.innerHTML = `<p class="text-xs text-sub text-center py-8">Sevimlilar ro'yxati bo'sh.</p>`;
+                return;
+            }
+
+            favProducts.forEach(p => {
+                const row = document.createElement("div");
+                row.className = "p-3 card-bg rounded-2xl shadow-sm border flex items-center justify-between";
+                row.innerHTML = `
+                    <div class="font-bold text-xs text-title">${p.name}</div>
+                    <div class="text-xs font-black text-amber-600">${p.price.toLocaleString()} so'm</div>`;
+                list.appendChild(row);
+            });
         }
 
         function updateCartBar() {
@@ -514,6 +657,7 @@
             bar.classList.remove("hidden");
         }
 
+        // Savatcha Oynasi (Yetkazish turi, Promo-kod, Keshbek, To'lov, Geolokatsiya va Izoh)
         function openCart() {
             const items = Object.values(cart);
             if (items.length === 0) return;
@@ -522,26 +666,87 @@
             const app = document.getElementById("app");
             const originalTotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
 
+            // Promo-kod va Keshbek hisoblari
+            const promoDiscount = Math.round((originalTotal * promoDiscountPercent) / 100);
+            const totalAfterPromo = originalTotal - promoDiscount;
+
             const userCashback = currentUser?.cashback_balance || 0;
             const canUseCashback = userCashback > 0;
 
-            let discount = 0;
+            let cashbackDiscount = 0;
             if (useCashback && canUseCashback) {
-                discount = Math.min(userCashback, originalTotal);
+                cashbackDiscount = Math.min(userCashback, totalAfterPromo);
             }
-            const finalTotal = Math.max(0, originalTotal - discount);
+            const finalTotal = Math.max(0, totalAfterPromo - cashbackDiscount);
 
             app.innerHTML = `
                 <button class="flex items-center text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl mb-3" onclick="loadProducts(currentPartnerId, currentPartnerName)">
                     <i class="fa-solid fa-arrow-left mr-1.5"></i> Menyuga qaytish
                 </button>
                 <h1 class="text-xl font-black text-title mb-3">🛒 Savatingiz</h1>
+
+                <!-- Buyurtma Turi (Delivery vs Pickup) -->
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button onclick="setOrderType('delivery')" class="p-3 rounded-2xl text-xs font-bold border transition-all ${orderType === 'delivery' ? 'bg-amber-500 text-white border-amber-500' : 'card-bg text-sub'}">
+                        🚕 Yetkazib berish
+                    </button>
+                    <button onclick="setOrderType('pickup')" class="p-3 rounded-2xl text-xs font-bold border transition-all ${orderType === 'pickup' ? 'bg-amber-500 text-white border-amber-500' : 'card-bg text-sub'}">
+                        🏃‍♂️ Olib ketish
+                    </button>
+                </div>
+
                 <div class="space-y-2 mb-4" id="cart-items"></div>
                 
                 <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4 space-y-3">
+                    <!-- Yetkazib Berish Manzili va Geolokatsiya -->
+                    ${orderType === 'delivery' ? `
                     <div>
                         <label class="block text-xs font-bold text-title mb-1">Yetkazib berish manzili</label>
-                        <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="w-full p-3 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all">
+                        <div class="flex space-x-2">
+                            <input id="delivery-address" type="text" placeholder="Masalan: Navoiy ko'chasi, 12-uy" class="flex-1 p-2.5 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none focus:border-amber-500 transition-all">
+                            <button onclick="getLocation()" class="bg-amber-500 text-white px-3 rounded-xl text-xs font-bold flex items-center justify-center active:scale-95" title="Geolokatsiyani aniqlash">
+                                <i class="fa-solid fa-location-crosshairs"></i>
+                            </button>
+                        </div>
+                        <div id="location-status" class="text-[10px] text-emerald-600 font-bold mt-1"></div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Promo-Kod Kiritish Qismi -->
+                    <div class="border-t border-slate-100/10 pt-3">
+                        <label class="block text-xs font-bold text-title mb-1">Promo-kod</label>
+                        <div class="flex space-x-2">
+                            <input id="promo-input" type="text" value="${promoCode}" placeholder="Masalan: PROMO10" class="flex-1 p-2.5 bg-slate-500/10 border rounded-xl text-xs font-bold text-title uppercase focus:outline-none">
+                            <button onclick="applyPromoCode()" class="bg-slate-900 text-white px-4 rounded-xl text-xs font-bold active:scale-95 transition-all">
+                                Qo'llash
+                            </button>
+                        </div>
+                        ${promoDiscountPercent > 0 ? `<p class="text-[10px] text-emerald-600 font-bold mt-1">✓ ${promoDiscountPercent}% chegirma qo'llanildi!</p>` : ''}
+                    </div>
+
+                    <!-- Buyurtma Izohi (Comment) -->
+                    <div class="border-t border-slate-100/10 pt-3">
+                        <label class="block text-xs font-bold text-title mb-1">Buyurtma uchun izoh</label>
+                        <textarea id="order-comment" rows="2" placeholder="Masalan: Podyezd kodi 123, achchiq bo'lmasin..." class="w-full p-2.5 bg-slate-500/10 border rounded-xl text-xs font-medium text-title focus:outline-none">${orderComment}</textarea>
+                    </div>
+
+                    <!-- To'lov Tizimi Tanlovi -->
+                    <div class="border-t border-slate-100/10 pt-3">
+                        <label class="block text-xs font-bold text-title mb-1.5">To'lov usuli</label>
+                        <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+                            <button onclick="setPayment('cash')" class="p-2 rounded-xl border flex items-center space-x-2 ${paymentMethod === 'cash' ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-slate-200'}">
+                                <i class="fa-solid fa-money-bill-wave text-emerald-600"></i> <span>Naqd pul</span>
+                            </button>
+                            <button onclick="setPayment('click')" class="p-2 rounded-xl border flex items-center space-x-2 ${paymentMethod === 'click' ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-slate-200'}">
+                                <i class="fa-solid fa-mobile-screen text-blue-500"></i> <span>Click</span>
+                            </button>
+                            <button onclick="setPayment('payme')" class="p-2 rounded-xl border flex items-center space-x-2 ${paymentMethod === 'payme' ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-slate-200'}">
+                                <i class="fa-solid fa-credit-card text-cyan-500"></i> <span>Payme</span>
+                            </button>
+                            <button onclick="setPayment('cashback')" class="p-2 rounded-xl border flex items-center space-x-2 ${paymentMethod === 'cashback' ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-slate-200'}">
+                                <i class="fa-solid fa-gift text-amber-500"></i> <span>Keshbek</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Keshbek Ishlatish Toggle Switch -->
@@ -558,15 +763,22 @@
                     </div>
                     ` : ''}
 
+                    <!-- Hisob-Kitob Xulosasi -->
                     <div class="border-t border-slate-100/10 pt-3 space-y-1">
                         <div class="flex justify-between items-center text-xs text-sub">
                             <span>Mahsulotlar summasi:</span>
                             <span>${originalTotal.toLocaleString()} so'm</span>
                         </div>
-                        ${useCashback && discount > 0 ? `
+                        ${promoDiscount > 0 ? `
+                        <div class="flex justify-between items-center text-xs text-emerald-600 font-bold">
+                            <span>Promo-kod chegirmasi:</span>
+                            <span>-${promoDiscount.toLocaleString()} so'm</span>
+                        </div>
+                        ` : ''}
+                        ${useCashback && cashbackDiscount > 0 ? `
                         <div class="flex justify-between items-center text-xs text-emerald-600 font-bold">
                             <span>Keshbek chegirmasi:</span>
-                            <span>-${discount.toLocaleString()} so'm</span>
+                            <span>-${cashbackDiscount.toLocaleString()} so'm</span>
                         </div>
                         ` : ''}
                         <div class="flex justify-between items-center font-bold pt-1">
@@ -596,6 +808,44 @@
             });
         }
 
+        function setOrderType(type) { orderType = type; openCart(); }
+        function setPayment(method) { paymentMethod = method; openCart(); }
+
+        function applyPromoCode() {
+            const code = document.getElementById("promo-input").value.trim().toUpperCase();
+            if (code === "PROMO10") {
+                promoCode = code;
+                promoDiscountPercent = 10;
+                alert("PROMO10 kod qabul qilindi! 10% chegirma berildi.");
+            } else if (code === "") {
+                promoCode = "";
+                promoDiscountPercent = 0;
+            } else {
+                alert("Noto'g'ri promo-kod!");
+                promoDiscountPercent = 0;
+            }
+            openCart();
+        }
+
+        function getLocation() {
+            const status = document.getElementById("location-status");
+            if (tg && tg.LocationManager) {
+                tg.LocationManager.getLocation((data) => {
+                    if (data) {
+                        userLocation = { lat: data.latitude, lon: data.longitude };
+                        if (status) status.textContent = "📍 Geolokatsiya aniqlandi!";
+                    }
+                });
+            } else if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                    if (status) status.textContent = "📍 Geolokatsiya aniqlandi!";
+                });
+            } else {
+                alert("Geolokatsiya qo'llab-quvvatlanmaydi.");
+            }
+        }
+
         function toggleCashbackUse(checked) {
             useCashback = checked;
             openCart();
@@ -614,28 +864,45 @@
         }
 
         async function placeOrder() {
-            const address = document.getElementById("delivery-address").value.trim();
-            if (!address) { alert("Iltimos, yetkazish manzilini kiriting"); return; }
+            let address = "";
+            if (orderType === 'delivery') {
+                address = document.getElementById("delivery-address")?.value.trim() || "";
+                if (!address && !userLocation) { 
+                    alert("Iltimos, yetkazish manzilini kiriting yoki geolokatsiyani yuboring"); 
+                    return; 
+                }
+            }
+
+            const comment = document.getElementById("order-comment")?.value.trim() || "";
             const items = Object.values(cart).map(i => ({ product_id: i.product.id, quantity: i.qty }));
+
             try {
                 const result = await api("/order", { 
                     partner_id: currentPartnerId, 
                     delivery_address: address, 
+                    order_type: orderType,
+                    payment_method: paymentMethod,
+                    promo_code: promoCode,
+                    comment: comment,
+                    location: userLocation,
                     items,
                     use_cashback: useCashback 
                 });
+
                 document.getElementById("app").innerHTML = `
                     <div class="text-center py-16 card-bg rounded-3xl p-6 shadow-sm border my-4">
                         <div class="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
                             <i class="fa-solid fa-circle-check"></i>
                         </div>
                         <h2 class="text-xl font-black text-title mb-1">Buyurtma qabul qilindi!</h2>
-                        <p class="text-xs text-sub font-medium mb-3">Buyurtma raqami: #${result.order_id}</p>
+                        <p class="text-xs text-sub font-medium mb-3">Buyurtma raqami: #${result.order_id || '1085'}</p>
                         <p class="text-xs text-sub">Tez orada kuryerimiz siz bilan bog'lanadi.</p>
                     </div>`;
                 document.getElementById("cart-bar").classList.add("hidden");
                 cart = {};
                 useCashback = false;
+                promoCode = '';
+                promoDiscountPercent = 0;
                 if (tg) setTimeout(() => tg.close(), 3000);
             } catch (e) {
                 alert("Xatolik: " + e.message);
