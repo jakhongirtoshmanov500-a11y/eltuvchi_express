@@ -1180,3 +1180,7 @@ app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
 app.include_router(finance_router)
+@app.get("/health")
+@app.head("/health")
+async def health_check():
+    return {"status": "ok"}
