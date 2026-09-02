@@ -171,7 +171,6 @@
             return res.json();
         }
 
-        // TUZATILGAN API GET FUNKSIYASI (Query parameter mantiqi to'g'rilandi)
         async function apiGet(path) {
             const separator = path.includes('?') ? '&' : '?';
             const res = await fetch(`/api/shop${path}${separator}init_data=${encodeURIComponent(initData)}`);
@@ -254,6 +253,14 @@
             const app = document.getElementById("app");
             renderLoading("Ma'lumotlar yuklanmoqda...");
 
+            // Profil ma'lumotlarini serverdan yangilab olish (Keshbek va boshqalar aniq bo'lishi uchun)
+            try {
+                const updatedMe = await api("/me", {});
+                currentUser = updatedMe;
+            } catch (e) {
+                console.error("Profilni yangilashda xatolik:", e);
+            }
+
             const cashback = (currentUser.cashback_balance || 0).toLocaleString();
             const refCode = currentUser.referral_code || "";
             const refLink = `https://t.me/EltuvchiExpressBot?start=${refCode}`;
@@ -262,7 +269,6 @@
             const userBirthDate = currentUser.birth_date || '';
             const userPhone = currentUser.phone || '—';
 
-            // Serverdan real buyurtmalar tarixini olish
             let userOrders = [];
             try {
                 userOrders = await apiGet("/orders");
@@ -335,12 +341,11 @@
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 mb-1">Keshbek Balans</div>
                     <div class="text-3xl font-black tracking-tight mb-4">${cashback} <span class="text-sm font-bold text-slate-300">so'm</span></div>
                     <div class="flex items-center justify-between bg-white/10 backdrop-blur-md p-3 rounded-2xl text-xs font-medium border border-white/5">
-                        <span class="text-slate-300">Har bir xaridizdan keshbek toplanadi</span>
+                        <span class="text-slate-300">Har bir xaridingizdan keshbek to'planadi</span>
                         <i class="fa-solid fa-gift text-amber-400 text-sm"></i>
                     </div>
                 </div>
 
-                <!-- Real Buyurtmalar Tarixi va Statusi -->
                 <div class="card-bg p-4 rounded-2xl shadow-sm border mb-4">
                     <h3 class="text-xs font-black text-title uppercase tracking-wider mb-3">Buyurtmalar Tarixi</h3>
                     <div class="max-h-60 overflow-y-auto no-scrollbar space-y-2">
@@ -473,7 +478,7 @@
                 list.innerHTML = `
                     <div class="text-center py-12 card-bg rounded-2xl border border-dashed p-4">
                         <i class="fa-solid fa-store-slash text-2xl text-sub mb-2"></i>
-                        <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochiq do'kon yo'q.</p>
+                        <p class="text-xs text-sub font-medium">Hozircha bu shaharda ochoq do'kon yo'q.</p>
                     </div>`;
                 updateCartBar();
                 return;
@@ -691,7 +696,7 @@
             bar.classList.remove("hidden");
         }
 
-        // Savatcha Oynasi (Barcha real to'lov tizimlari va alohida keshbek bloki bilan)
+        // SAVATCHA OYNASI (Alohida keshbek bloki va to'lov turlari bilan)
         function openCart() {
             const items = Object.values(cart);
             if (items.length === 0) return;
@@ -703,6 +708,7 @@
             const promoDiscount = Math.round((originalTotal * promoDiscountPercent) / 100);
             const totalAfterPromo = originalTotal - promoDiscount;
 
+            // Keshbek hisobi
             const userCashback = currentUser?.cashback_balance || 0;
             const canUseCashback = userCashback > 0;
 
@@ -779,21 +785,23 @@
                     </div>
 
                     <!-- KESHBEKDAN FOYDALANISH ALOHIDA QISM -->
-                    ${canUseCashback ? `
-                    <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center bg-amber-500/5 p-2.5 rounded-xl border border-amber-500/20">
+                    <div class="border-t border-slate-100/10 pt-3 flex justify-between items-center bg-amber-500/5 p-3 rounded-2xl border border-amber-500/20">
                         <div>
-                            <div class="text-xs font-bold text-title flex items-center space-x-1">
-                                <i class="fa-solid fa-coins text-amber-500"></i>
+                            <div class="text-xs font-bold text-title flex items-center space-x-1.5">
+                                <i class="fa-solid fa-coins text-amber-500 text-sm"></i>
                                 <span>Keshbekdan foydalanish</span>
                             </div>
-                            <div class="text-[10px] text-sub">Mavjud: ${userCashback.toLocaleString()} so'm</div>
+                            <div class="text-[10px] font-semibold text-sub mt-0.5">Mavjud keshbek: <span class="font-extrabold text-amber-600">${userCashback.toLocaleString()} so'm</span></div>
                         </div>
+                        ${canUseCashback ? `
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" id="cashback-toggle" class="sr-only peer" ${useCashback ? 'checked' : ''} onchange="toggleCashbackUse(this.checked)">
                             <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                         </label>
+                        ` : `
+                        <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">Mavjud emas</span>
+                        `}
                     </div>
-                    ` : ''}
 
                     <div class="border-t border-slate-100/10 pt-3 space-y-1">
                         <div class="flex justify-between items-center text-xs text-sub">
