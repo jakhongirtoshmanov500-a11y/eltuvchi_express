@@ -51,6 +51,23 @@ async def require_owner(user: User = Depends(get_current_admin_user)) -> User:
     return user
 
 
+async def get_current_partner_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+    """Hamkor kabineti uchun — faqat PARTNER rolidagi, faol foydalanuvchiga
+    ruxsat beradi. Boshqa hollarda /login sahifasiga qaytaradi."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise RedirectToLogin()
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+
+    if not user or not user.is_active or user.role != UserRole.PARTNER:
+        request.session.clear()
+        raise RedirectToLogin()
+
+    return user
+
+
 def is_scoped_to_city(user: User) -> bool:
     """OWNER — cheklovsiz (True qaytarsa filtr YO'Q). Operator — faqat o'z shahri (city_id bo'yicha filtr)."""
     return user.role == UserRole.ADMIN and user.city_id is not None

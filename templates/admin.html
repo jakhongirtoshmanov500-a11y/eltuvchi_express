@@ -18,7 +18,7 @@
             font-size: 0.875rem;
             font-weight: 600;
             color: #374151;
-            transition: background-color 0.15s;
+            transition: background-color 0.15s, color 0.15s;
         }
         .nav-btn:hover { background-color: #eef2ff; }
         .nav-btn.active { background-color: #4f46e5; color: white; }
@@ -29,12 +29,12 @@
 </head>
 <body id="app-body" class="bg-gray-100 text-gray-800 transition-colors duration-300">
 
-    <header id="main-header" class="bg-indigo-700 text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300">
+    <header id="main-header" class="bg-indigo-700 text-white p-4 shadow-md flex flex-wrap justify-between items-center gap-4 transition-colors duration-300">
         <h1 class="text-xl font-bold flex items-center gap-2">
             <img src="/static/images/logo.png" alt="Eltuvchi Express" class="h-9 w-9 object-contain" onerror="this.style.display='none'">
             Eltuvchi Express — Boshqaruv Paneli
         </h1>
-        <div class="flex items-center gap-4">
+        <div class="flex flex-wrap items-center gap-4">
             {% if is_owner %}
             <div class="flex items-center gap-1 bg-white/10 p-1.5 rounded-lg border border-white/20 text-xs">
                 <span class="font-semibold px-1">Shahar:</span>
@@ -46,10 +46,10 @@
             {% endif %}
             <div class="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20">
                 <span class="text-xs font-semibold px-1">Mavzu:</span>
-                <button onclick="setTheme('indigo')" class="w-5 h-5 rounded-full bg-indigo-600 border-2 border-white"></button>
-                <button onclick="setTheme('emerald')" class="w-5 h-5 rounded-full bg-emerald-600 border-2 border-white"></button>
-                <button onclick="setTheme('sky')" class="w-5 h-5 rounded-full bg-sky-600 border-2 border-white"></button>
-                <button onclick="setTheme('dark')" class="w-5 h-5 rounded-full bg-gray-900 border-2 border-white"></button>
+                <button onclick="setTheme('indigo')" class="w-5 h-5 rounded-full bg-indigo-600 border-2 border-white" title="Indigo"></button>
+                <button onclick="setTheme('emerald')" class="w-5 h-5 rounded-full bg-emerald-600 border-2 border-white" title="Emerald"></button>
+                <button onclick="setTheme('sky')" class="w-5 h-5 rounded-full bg-sky-600 border-2 border-white" title="Sky"></button>
+                <button onclick="setTheme('dark')" class="w-5 h-5 rounded-full bg-gray-900 border-2 border-white" title="Dark"></button>
             </div>
             <span class="bg-green-500 text-xs font-bold px-3 py-1 rounded-full">Tizim Faol</span>
             <div class="flex items-center gap-2 text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/20">
@@ -60,18 +60,22 @@
     </header>
 
     <div class="flex min-h-screen">
+        <!-- SIDEBAR -->
         <aside class="w-60 bg-white dark:bg-gray-900 border-r dark:border-gray-700 shrink-0 py-4 hidden md:block">
             <nav class="flex flex-col gap-1 px-3">
                 <button onclick="showPage('bosh')" data-page-btn="bosh" class="nav-btn">🏠 Bosh sahifa</button>
                 <button onclick="showPage('buyurtmalar')" data-page-btn="buyurtmalar" class="nav-btn">📦 Buyurtmalar</button>
                 <button onclick="showPage('kuryerlar')" data-page-btn="kuryerlar" class="nav-btn">🛵 Kuryerlar</button>
                 <button onclick="showPage('mijozlar')" data-page-btn="mijozlar" class="nav-btn">👥 Mijozlar</button>
+                <button onclick="showPage('dokonlar')" data-page-btn="dokonlar" class="nav-btn">🏪 Do'konlar</button>
                 <button onclick="showPage('tugilgankun')" data-page-btn="tugilgankun" class="nav-btn">🎂 Tug'ilgan kunlar</button>
                 <button onclick="showPage('referal')" data-page-btn="referal" class="nav-btn">🎁 Referal</button>
                 <button onclick="showPage('bonuscashback')" data-page-btn="bonuscashback" class="nav-btn">💸 Bonus/Cashback</button>
-                <button onclick="showPage('dokonlar')" data-page-btn="dokonlar" class="nav-btn">🏪 Do'konlar</button>
+                
                 {% if is_owner %}
                 <div class="border-t my-2 dark:border-gray-700"></div>
+                <button onclick="showPage('shaharlar')" data-page-btn="shaharlar" class="nav-btn">🏙️ Shaharlar Boshqaruvi</button>
+                <button onclick="showPage('reklamalar')" data-page-btn="reklamalar" class="nav-btn">🖼️ App Reklamalari</button>
                 <button onclick="showPage('operatorlar')" data-page-btn="operatorlar" class="nav-btn">🧑‍💼 Operatorlar</button>
                 <button onclick="showPage('moliya')" data-page-btn="moliya" class="nav-btn">💰 Moliya</button>
                 <button onclick="showPage('xavfzone')" data-page-btn="xavfzone" class="nav-btn !text-red-600">⚠️ Reset</button>
@@ -80,844 +84,948 @@
         </aside>
 
         <main class="flex-1 mt-2 p-4 space-y-6 min-w-0" id="main-content">
-            <select id="mobile-page-select" onchange="showPage(this.value)" class="md:hidden w-full mb-2 p-2 border rounded-lg font-semibold">
+            <!-- MOBILE NAVIGATION SELECT -->
+            <select id="mobile-page-select" onchange="showPage(this.value)" class="md:hidden w-full mb-2 p-2 border rounded-lg font-semibold dark:bg-gray-800 dark:text-white">
                 <option value="bosh">🏠 Bosh sahifa</option>
                 <option value="buyurtmalar">📦 Buyurtmalar</option>
                 <option value="kuryerlar">🛵 Kuryerlar</option>
                 <option value="mijozlar">👥 Mijozlar</option>
+                <option value="dokonlar">🏪 Do'konlar</option>
                 <option value="tugilgankun">🎂 Tug'ilgan kunlar</option>
                 <option value="referal">🎁 Referal</option>
                 <option value="bonuscashback">💸 Bonus/Cashback</option>
-                <option value="dokonlar">🏪 Do'konlar</option>
                 {% if is_owner %}
+                <option value="shaharlar">🏙️ Shaharlar Boshqaruvi</option>
+                <option value="reklamalar">🖼️ App Reklamalari</option>
                 <option value="operatorlar">🧑‍💼 Operatorlar</option>
                 <option value="moliya">💰 Moliya</option>
                 <option value="xavfzone">⚠️ Reset</option>
                 {% endif %}
             </select>
 
+            <!-- 1. BOSH SAHIFA -->
+            <section class="app-page" data-page="bosh">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-<section class="app-page" data-page="bosh">
-        <!-- DASHBOARD & SETTINGS -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            {% if is_owner %}
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tizim Sozlamalari</h2>
-                <form action="/admin/settings" method="POST" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium">Asosiy Yetkazish Narxi (so'm)</label>
-                        <input type="number" name="base_fee" value="{{ system_setting.base_delivery_fee if system_setting else 10000 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium">Standart Komissiya Foizi (%)</label>
-                        <input type="number" step="0.1" name="service_commission_percent" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
-                        <p class="text-[11px] text-gray-500 mt-1">Yangi do'kon qo'shilganda shu foiz taklif etiladi; har bir do'kon uchun alohida o'zgartirish ham mumkin.</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium">Yetkazish Narxidan Kuryer Ulushi (%)</label>
-                        <input type="number" step="0.1" min="0" max="100" name="courier_share_percent" value="{{ system_setting.courier_share_percent if system_setting else 80.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" required>
-                        <p class="text-[11px] text-gray-500 mt-1">Masalan 80% — yetkazish narxining 80%i kuryerga, qolgan 20%i sizga qoladi.</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium">Ob-havo Sharoiti</label>
-                        <select id="weather-select" name="weather_condition" onchange="applyWeatherMultiplier()" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                            {% for w in weather_conditions %}
-                            <option value="{{ w }}" {% if system_setting and system_setting.weather_condition.value == w %}selected{% endif %}>{{ w }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium">Ob-havo Koeffitsiyenti (avtomatik)</label>
-                        <input type="number" step="0.1" id="weather-multiplier-input" name="weather_multiplier" value="{{ system_setting.weather_multiplier if system_setting else 1.0 }}" class="w-full mt-1 p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-700 cursor-not-allowed" readonly required>
-                        <p class="text-[11px] text-gray-500 mt-1">Tanlangan ob-havoga qarab avtomatik hisoblanadi, qo'lda o'zgartirilmaydi.</p>
-                    </div>
-                    <button type="submit" class="theme-btn w-full bg-indigo-600 text-white py-2 rounded-lg font-bold">Saqlash</button>
-                </form>
-            </div>
-            {% endif %}
-
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 {% if is_owner %}md:col-span-2{% else %}md:col-span-3{% endif %}">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📊 Bugungi Real-Vaqt Statistikasi</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="bg-indigo-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
-                        <p class="text-xs uppercase font-semibold">Faol Kuryerlar</p>
-                        <p class="theme-stat-number text-3xl font-extrabold text-indigo-700 mt-1">{{ active_couriers }}</p>
-                    </div>
-                    <div class="bg-green-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
-                        <p class="text-xs uppercase font-semibold">Faol Do'konlar</p>
-                        <p class="text-3xl font-extrabold text-green-700 dark:text-green-400 mt-1">{{ active_partners }}</p>
-                    </div>
-                    <div class="bg-yellow-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
-                        <p class="text-xs uppercase font-semibold">Bugungi Buyurtmalar</p>
-                        <p class="text-3xl font-extrabold text-yellow-700 dark:text-yellow-400 mt-1">{{ today_orders_count }}</p>
-                    </div>
-                    <div class="bg-purple-50 dark:bg-gray-800 p-4 rounded-lg text-center border">
-                        <p class="text-xs uppercase font-semibold">Bugungi Tushum</p>
-                        <p class="text-2xl font-extrabold text-purple-700 dark:text-purple-400 mt-1">{{ today_revenue }} so'm</p>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        {% if is_owner and analytics %}
-        <!-- ANALITIKA (faqat OWNER) -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📈 Bugungi Moliyaviy Hisobot</h2>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.today.order_count }} ta</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.courier_pay) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.partner_pay) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.commission_income) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.delivery_income) }} so'm</span></div>
-                    <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Bugungi sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.today.net_profit) }} so'm</span></div>
-                    <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.today_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.today_loss.amount) }} so'm</span></div>
-                </div>
-            </div>
-
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📅 Shu Oylik Moliyaviy Hisobot</h2>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.month.order_count }} ta</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.courier_pay) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.partner_pay) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.commission_income) }} so'm</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.delivery_income) }} so'm</span></div>
-                    <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Oylik sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.month.net_profit) }} so'm</span></div>
-                    <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.month_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.month_loss.amount) }} so'm</span></div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-</section>
-
-        <section class="app-page" data-page="buyurtmalar" style="display:none;">
-        <!-- YANGI BUYURTMA YARATISH -->
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📞 Yangi Buyurtma Yaratish (qo'lda)</h2>
-            <p class="text-xs text-gray-500 mb-4">Mijoz telefon orqali qo'ng'iroq qilganda, buyurtmani shu yerdan qo'lda kiritasiz.</p>
-            <form id="create-order-form" action="/admin/orders/create" method="POST" class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium">Mijoz ismi</label>
-                        <input type="text" name="client_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Mijoz telefoni</label>
-                        <input type="text" name="client_phone" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Yetkazish manzili</label>
-                        <input type="text" name="delivery_address" placeholder="Mustaqillik ko'chasi, 12-uy" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-medium mb-1">Do'kon</label>
-                    <select id="order-partner-select" name="partner_id" onchange="onPartnerChange()" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                        <option value="">Do'konni tanlang</option>
-                        {% for partner in partners %}
-                        <option value="{{ partner.id }}">{{ partner.brand_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-xs font-medium">Mahsulotlar</label>
-                        <button type="button" onclick="addOrderItemRow()" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">+ Mahsulot qo'shish</button>
-                    </div>
-                    <div id="order-items-container" class="space-y-2">
-                        <!-- JS orqali qatorlar shu yerga qo'shiladi -->
-                    </div>
-                    <p id="order-items-hint" class="text-xs text-gray-400 mt-1">Avval do'konni tanlang, keyin mahsulot qo'shing.</p>
-                </div>
-
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                    <span class="text-sm font-semibold">Taxminiy summa: <span id="order-estimated-total">0</span> so'm</span>
-                    <span class="text-xs text-gray-500">+ yetkazish narxi (avtomatik hisoblanadi)</span>
-                </div>
-
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Buyurtmani Yaratish</button>
-            </form>
-        </div>
-
-        <!-- ORDERS -->
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar Boshqaruvi</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-100 dark:bg-gray-700 border-b text-sm">
-                            <th class="p-3">ID</th>
-                            <th class="p-3">Manzil</th>
-                            <th class="p-3">Jami Summa</th>
-                            <th class="p-3">Yetkazish Narxi</th>
-                            <th class="p-3">Status</th>
-                            <th class="p-3 text-center">Amallar</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y text-sm dark:divide-gray-700">
-                        {% for order in orders %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td class="p-3 font-bold">
-                                <button type="button" data-order-id="{{ order.id }}" onclick="toggleOrderDetails(this.dataset.orderId)" class="text-indigo-600">#{{ order.id }} 🔍</button>
-                            </td>
-                            <td class="p-3">{{ order.delivery_address }}</td>
-                            <td class="theme-text p-3 font-semibold text-indigo-600">{{ order.total_price }} so'm</td>
-                            <td class="p-3 font-semibold">{{ order.delivery_fee }} so'm</td>
-                            <td class="p-3">
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ status_labels.get(order.status.value, order.status.value) }}</span>
-                            </td>
-                            <td class="p-3 text-center">
-                                <div class="flex flex-col gap-1 items-center">
-                                    {% if order.status.value in next_status_map %}
-                                    <form action="/admin/orders/{{ order.id }}/update" method="POST">
-                                        <input type="hidden" name="new_status" value="{{ next_status_map[order.status.value][0] }}">
-                                        <input type="hidden" name="courier_id" value="{{ order.courier_id or '' }}">
-                                        <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold whitespace-nowrap">{{ next_status_map[order.status.value][1] }}</button>
-                                    </form>
-                                    {% endif %}
-                                    <form action="/admin/orders/{{ order.id }}/update" method="POST" class="inline-flex gap-1">
-                                        <select name="courier_id" class="text-xs p-1 border rounded dark:bg-gray-800">
-                                            <option value="">Kuryer tanlang</option>
-                                            {% for courier in couriers %}
-                                            <option value="{{ courier.id }}" {% if order.courier_id == courier.id %}selected{% endif %}>{{ courier.full_name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                        <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800">
-                                            {% for st in order_statuses %}
-                                            <option value="{{ st }}" {% if order.status.value == st %}selected{% endif %}>{{ status_labels.get(st, st) }}</option>
-                                            {% endfor %}
-                                        </select>
-                                        <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr id="order-details-{{ order.id }}" class="hidden bg-gray-50 dark:bg-gray-800/50">
-                            <td colspan="6" class="p-3">
-                                <p class="text-xs font-semibold mb-1">Buyurtma tarkibi:</p>
-                                {% if order.items %}
-                                <ul class="text-xs space-y-0.5">
-                                    {% for item in order.items %}
-                                    <li>• {{ item.product_name }} — {{ item.quantity }} x {{ item.unit_price }} so'm = {{ item.quantity * item.unit_price }} so'm</li>
-                                    {% endfor %}
-                                </ul>
-                                {% else %}
-                                <p class="text-xs text-gray-400">Bu buyurtma uchun mahsulot tarkibi saqlanmagan (eski buyurtma).</p>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-</section>
-
-        <section class="app-page" data-page="kuryerlar" style="display:none;">
-        <!-- COURIERS -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            <!-- Kuryer Qo'shish Formasi -->
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🛵 Yangi Kuryer Qo'shish</h2>
-                <form action="/admin/couriers/create" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Ism Familiya</label>
-                        <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Telefon raqami</label>
-                        <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Transport turi</label>
-                        <select name="transport_type" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                            <option value="walking">Piyoda</option>
-                            <option value="bicycle">Velosiped</option>
-                            <option value="scooter">Skuter</option>
-                            <option value="car">Avtomobil</option>
-                        </select>
-                    </div>
                     {% if is_owner %}
-                    <div>
-                        <label class="block text-xs font-medium">Shahar</label>
-                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Shaharni tanlang</option>
-                            {% for city in all_cities %}
-                            <option value="{{ city.id }}" {% if active_city_id == city.id %}selected{% endif %}>{{ city.name }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tizim Sozlamalari</h2>
+                        <form action="/admin/settings" method="POST" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium">Asosiy Yetkazish Narxi (so'm)</label>
+                                <input type="number" name="base_fee" value="{{ system_setting.base_delivery_fee if system_setting else 10000 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Standart Komissiya Foizi (%)</label>
+                                <input type="number" step="0.1" name="service_commission_percent" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                <p class="text-[11px] text-gray-500 mt-1">Yangi do'kon qo'shilganda shu foiz taklif etiladi.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Yetkazish Narxidan Kuryer Ulushi (%)</label>
+                                <input type="number" step="0.1" min="0" max="100" name="courier_share_percent" value="{{ system_setting.courier_share_percent if system_setting else 80.0 }}" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Ob-havo Sharoiti</label>
+                                <select id="weather-select" name="weather_condition" onchange="applyWeatherMultiplier()" class="w-full mt-1 p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    {% for w in weather_conditions %}
+                                    <option value="{{ w }}" {% if system_setting and system_setting.weather_condition.value == w %}selected{% endif %}>{{ w }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Ob-havo Koeffitsiyenti (avtomatik)</label>
+                                <input type="number" step="0.1" id="weather-multiplier-input" name="weather_multiplier" value="{{ system_setting.weather_multiplier if system_setting else 1.0 }}" class="w-full mt-1 p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-700 dark:text-white cursor-not-allowed" readonly required>
+                            </div>
+                            <button type="submit" class="theme-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold">Saqlash</button>
+                        </form>
                     </div>
                     {% endif %}
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
-                </form>
-            </div>
 
-            <!-- Kuryerlar Ro'yxati -->
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Kuryerlar</h2>
-                <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
-                            <tr class="border-b text-xs">
-                                <th class="p-2">Ism</th>
-                                <th class="p-2">Telefon</th>
-                                <th class="p-2">Transport</th>
-                                {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
-                                <th class="p-2">Balans</th>
-                                <th class="p-2 text-center">Holat</th>
-                                <th class="p-2 text-center">Amallar</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y text-sm dark:divide-gray-700">
-                            {% for courier in all_couriers %}
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                                <td class="p-2 font-medium">{{ courier.full_name }}</td>
-                                <td class="p-2 text-xs">{{ courier.phone_number }}</td>
-                                <td class="p-2 text-xs">
-                                    {% if courier.courier_profile %}{{ courier.courier_profile.transport_type }}{% endif %}
-                                </td>
-                                {% if is_owner %}<td class="p-2 text-xs">{{ courier.city.name if courier.city else '—' }}</td>{% endif %}
-                                <td class="p-2 text-xs font-semibold text-green-700">
-                                    {% if courier.courier_profile %}{{ "%.0f"|format(courier.courier_profile.balance) }} so'm{% endif %}
-                                </td>
-                                <td class="p-2 text-center">
-                                    <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if courier.is_active %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
-                                        {% if courier.is_active %}Faol{% else %}Faol emas{% endif %}
-                                    </span>
-                                </td>
-                                <td class="p-2 text-center">
-                                    <div class="inline-flex gap-1">
-                                        <button type="button"
-                                                data-id="{{ courier.id }}"
-                                                data-name="{{ courier.full_name }}"
-                                                data-phone="{{ courier.phone_number }}"
-                                                data-transport="{{ courier.courier_profile.transport_type if courier.courier_profile else 'walking' }}"
-                                                data-city-id="{{ courier.city_id or '' }}"
-                                                onclick="openEditCourierModal(this)"
-                                                class="text-blue-600 text-xs font-bold px-1">✏️</button>
-                                        <form action="/admin/couriers/{{ courier.id }}/toggle" method="POST" class="inline">
-                                            <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
-                                                {% if courier.is_active %}O'chirish{% else %}Yoqish{% endif %}
-                                            </button>
-                                        </form>
-                                        <form action="/admin/couriers/{{ courier.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Kuryerni butunlay o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" class="p-3 text-center text-gray-400 text-xs">Hozircha kuryerlar yo'q</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </div>
-
-</section>
-
-        <section class="app-page" data-page="mijozlar" style="display:none;">
-        <!-- CLIENTS -->
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">👥 Mijozlar</h2>
-            <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
-                        <tr class="border-b text-xs">
-                            <th class="p-2">Ism</th>
-                            <th class="p-2">Telefon</th>
-                            {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
-                            <th class="p-2">Buyurtmalar soni</th>
-                            <th class="p-2">Umumiy xarajat</th>
-                            <th class="p-2 text-center">Holat</th>
-                            <th class="p-2 text-center">Amallar</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y text-sm dark:divide-gray-700">
-                        {% for client, order_count, total_spent in clients %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td class="p-2 font-medium">{{ client.full_name }}</td>
-                            <td class="p-2 text-xs">{{ client.phone_number }}</td>
-                            {% if is_owner %}<td class="p-2 text-xs">{{ client.city.name if client.city else '—' }}</td>{% endif %}
-                            <td class="p-2 text-center">{{ order_count }}</td>
-                            <td class="p-2 text-xs font-semibold text-green-700">{{ "%.0f"|format(total_spent) }} so'm</td>
-                            <td class="p-2 text-center">
-                                <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if client.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                                    {% if client.is_active %}Faol{% else %}Bloklangan{% endif %}
-                                </span>
-                            </td>
-                            <td class="p-2 text-center">
-                                <form action="/admin/clients/{{ client.id }}/toggle" method="POST" class="inline">
-                                    <button type="submit" class="text-xs px-2 py-1 rounded {% if client.is_active %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %} font-semibold">
-                                        {% if client.is_active %}Bloklash{% else %}Blokdan chiqarish{% endif %}
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {% if is_owner %}
-</section>
-
-        <section class="app-page" data-page="operatorlar" style="display:none;">
-        <!-- OPERATORLAR (faqat OWNER) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🧑‍💼 Yangi Operator Qo'shish</h2>
-                <p class="text-xs text-gray-500 mb-3">Operator faqat o'ziga biriktirilgan shaharning ma'lumotlarini ko'radi va boshqaradi.</p>
-                <form action="/admin/operators/create" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Ism Familiya</label>
-                        <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Telefon raqami (login uchun)</label>
-                        <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Parol</label>
-                        <input type="password" name="password" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Biriktirilgan shahar</label>
-                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Shaharni tanlang</option>
-                            {% for city in all_cities %}
-                            <option value="{{ city.id }}">{{ city.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
-                </form>
-            </div>
-
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Operatorlar</h2>
-                <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
-                            <tr class="border-b text-xs">
-                                <th class="p-2">Ism</th>
-                                <th class="p-2">Telefon</th>
-                                <th class="p-2">Shahar</th>
-                                <th class="p-2 text-center">Holat</th>
-                                <th class="p-2 text-center">Amallar</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y text-sm dark:divide-gray-700">
-                            {% for operator in operators %}
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                                <td class="p-2 font-medium">{{ operator.full_name }}</td>
-                                <td class="p-2 text-xs">{{ operator.phone_number }}</td>
-                                <td class="p-2 text-xs">{{ operator.city.name if operator.city else '—' }}</td>
-                                <td class="p-2 text-center">
-                                    <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if operator.is_active %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
-                                        {% if operator.is_active %}Faol{% else %}Faol emas{% endif %}
-                                    </span>
-                                </td>
-                                <td class="p-2 text-center">
-                                    <div class="inline-flex gap-1">
-                                        <form action="/admin/operators/{{ operator.id }}/toggle" method="POST" class="inline">
-                                            <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
-                                                {% if operator.is_active %}O'chirish{% else %}Yoqish{% endif %}
-                                            </button>
-                                        </form>
-                                        <form action="/admin/operators/{{ operator.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Operatorni butunlay o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="5" class="p-3 text-center text-gray-400 text-xs">Hozircha operatorlar yo'q</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if is_owner %}
-</section>
-
-        <section class="app-page" data-page="moliya" style="display:none;">
-        <!-- MOLIYAVIY BOSHQARUV (faqat OWNER) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Kuryer Balansi</h2>
-                <form action="/admin/finance/courier" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Kuryer</label>
-                        <select name="user_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Kuryerni tanlang</option>
-                            {% for c in all_couriers %}
-                            <option value="{{ c.id }}">{{ c.full_name }} ({{ "%.0f"|format(c.courier_profile.balance) if c.courier_profile else 0 }} so'm)</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Summa (so'm)</label>
-                        <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Izoh</label>
-                        <input type="text" name="note" placeholder="Masalan: haftalik hisob-kitob" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                    </div>
-                    <div class="flex gap-2">
-                        <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
-                        <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Hamkor Balansi</h2>
-                <form action="/admin/finance/partner" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Do'kon</label>
-                        <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Do'konni tanlang</option>
-                            {% for p in partners %}
-                            <option value="{{ p.id }}">{{ p.brand_name }} ({{ "%.0f"|format(p.balance) }} so'm)</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Summa (so'm)</label>
-                        <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Izoh</label>
-                        <input type="text" name="note" placeholder="Masalan: oylik hisob-kitob" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                    </div>
-                    <div class="flex gap-2">
-                        <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
-                        <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📜 Tranzaksiyalar Tarixi</h2>
-                <div class="overflow-y-auto max-h-80 space-y-2">
-                    {% for tx in recent_transactions %}
-                    <div class="text-xs border-b pb-2 dark:border-gray-700">
-                        <div class="flex justify-between">
-                            <span class="font-semibold">
-                                {% if tx.user %}🛵 {{ tx.user.full_name }}{% elif tx.partner %}🏪 {{ tx.partner.brand_name }}{% else %}—{% endif %}
-                            </span>
-                            <span class="font-bold {% if tx.type.value == 'deposit' %}text-green-600{% else %}text-red-600{% endif %}">
-                                {% if tx.type.value == 'deposit' %}+{% else %}−{% endif %}{{ "%.0f"|format(tx.amount) }}
-                            </span>
-                        </div>
-                        <p class="text-gray-400">{{ tx.note or '—' }} · {{ tx.created_by.full_name if tx.created_by else '—' }} · {{ tx.created_at.strftime('%d.%m %H:%M') }}</p>
-                    </div>
-                    {% else %}
-                    <p class="text-xs text-gray-400 text-center">Hozircha tranzaksiya yo'q</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-</section>
-
-        <section class="app-page" data-page="dokonlar" style="display:none;">
-        <!-- PARTNERS & PRODUCTS -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            {% if is_owner %}
-            <!-- Do'kon Qo'shish Formasi (faqat OWNER) -->
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🏪 Yangi Do'kon Qo'shish</h2>
-                <form action="/admin/partners/create" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Do'kon Brend Nomi</label>
-                        <input type="text" name="brand_name" placeholder="Evos" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Kategoriya</label>
-                        <input type="text" name="category" placeholder="Fast Food" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Shahar</label>
-                        <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Shaharni tanlang</option>
-                            {% for city in all_cities %}
-                            <option value="{{ city.id }}">{{ city.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Manzil</label>
-                        <input type="text" name="address" placeholder="Mustaqillik ko'chasi, 5" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="block text-xs font-medium">Komissiya (%)</label>
-                            <input type="number" step="0.1" name="commission_rate" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium">Ish vaqti</label>
-                            <div class="flex gap-1 items-center mt-1">
-                                <input type="text" name="opening_time" value="09:00" class="w-1/2 p-2 border rounded-lg text-xs dark:bg-gray-800" required>
-                                <span>-</span>
-                                <input type="text" name="closing_time" value="23:00" class="w-1/2 p-2 border rounded-lg text-xs dark:bg-gray-800" required>
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 {% if is_owner %}md:col-span-2{% else %}md:col-span-3{% endif %} dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📊 Bugungi Real-Vaqt Statistikasi</h2>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="bg-indigo-50 dark:bg-gray-800 p-4 rounded-lg text-center border dark:border-gray-700">
+                                <p class="text-xs uppercase font-semibold">Faol Kuryerlar</p>
+                                <p class="theme-stat-number text-3xl font-extrabold text-indigo-700 mt-1">{{ active_couriers }}</p>
+                            </div>
+                            <div class="bg-green-50 dark:bg-gray-800 p-4 rounded-lg text-center border dark:border-gray-700">
+                                <p class="text-xs uppercase font-semibold">Faol Do'konlar</p>
+                                <p class="text-3xl font-extrabold text-green-700 dark:text-green-400 mt-1">{{ active_partners }}</p>
+                            </div>
+                            <div class="bg-yellow-50 dark:bg-gray-800 p-4 rounded-lg text-center border dark:border-gray-700">
+                                <p class="text-xs uppercase font-semibold">Bugungi Buyurtmalar</p>
+                                <p class="text-3xl font-extrabold text-yellow-700 dark:text-yellow-400 mt-1">{{ today_orders_count }}</p>
+                            </div>
+                            <div class="bg-purple-50 dark:bg-gray-800 p-4 rounded-lg text-center border dark:border-gray-700">
+                                <p class="text-xs uppercase font-semibold">Bugungi Tushum</p>
+                                <p class="text-2xl font-extrabold text-purple-700 dark:text-purple-400 mt-1">{{ today_revenue }} so'm</p>
                             </div>
                         </div>
                     </div>
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
-                </form>
-            </div>
-            {% endif %}
 
-            {% if is_owner %}
-            <!-- Mahsulot Qo'shish Formasi (faqat OWNER) -->
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
-                <form action="/admin/products/create" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Tegishli Do'kon</label>
-                        <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                            <option value="">Do'konni tanlang</option>
+                </div>
+
+                {% if is_owner and analytics %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📈 Bugungi Moliyaviy Hisobot</h2>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.today.order_count }} ta</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.courier_pay) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.partner_pay) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.commission_income) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.today.delivery_income) }} so'm</span></div>
+                            <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Bugungi sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.today.net_profit) }} so'm</span></div>
+                            <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.today_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.today_loss.amount) }} so'm</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📅 Shu Oylik Moliyaviy Hisobot</h2>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-500">Yetkazilgan buyurtmalar</span><span class="font-semibold">{{ analytics.month.order_count }} ta</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🛵 Kuryerlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.courier_pay) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🏪 Hamkorlar haqi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.partner_pay) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🏷️ Komissiya daromadi</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.commission_income) }} so'm</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">🚚 Yetkazishdan sof haq</span><span class="font-semibold">{{ "%.0f"|format(analytics.month.delivery_income) }} so'm</span></div>
+                            <div class="flex justify-between border-t pt-2 mt-2 dark:border-gray-700"><span class="font-bold">💰 Oylik sof daromad</span><span class="font-bold text-green-600">{{ "%.0f"|format(analytics.month.net_profit) }} so'm</span></div>
+                            <div class="flex justify-between text-red-600"><span>❌ Bekor qilingan ({{ analytics.month_loss.count }} ta)</span><span class="font-semibold">−{{ "%.0f"|format(analytics.month_loss.amount) }} so'm</span></div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
+
+            <!-- 2. BUYURTMALAR -->
+            <section class="app-page" data-page="buyurtmalar" style="display:none;">
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md mb-6 dark:bg-gray-900">
+                    <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📞 Yangi Buyurtma Yaratish (qo'lda)</h2>
+                    <form id="create-order-form" action="/admin/orders/create" method="POST" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium">Mijoz ismi</label>
+                                <input type="text" name="client_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Mijoz telefoni</label>
+                                <input type="text" name="client_phone" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Yetkazish manzili</label>
+                                <input type="text" name="delivery_address" placeholder="Mustaqillik ko'chasi, 12-uy" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium mb-1">Do'kon</label>
+                            <select id="order-partner-select" name="partner_id" onchange="onPartnerChange()" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                <option value="">Do'konni tanlang</option>
+                                {% for partner in partners %}
+                                <option value="{{ partner.id }}">{{ partner.brand_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-xs font-medium">Mahsulotlar</label>
+                                <button type="button" onclick="addOrderItemRow()" class="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 px-2 py-1 rounded font-semibold">+ Mahsulot qo'shish</button>
+                            </div>
+                            <div id="order-items-container" class="space-y-2"></div>
+                            <p id="order-items-hint" class="text-xs text-gray-400 mt-1">Avval do'konni tanlang, keyin mahsulot qo'shing.</p>
+                        </div>
+
+                        <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                            <span class="text-sm font-semibold">Taxminiy summa: <span id="order-estimated-total">0</span> so'm</span>
+                            <span class="text-xs text-gray-500 dark:text-gray-400">+ yetkazish narxi (avtomatik)</span>
+                        </div>
+
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Buyurtmani Yaratish</button>
+                    </form>
+                </div>
+
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                    <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar Boshqaruvi</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 text-sm">
+                                    <th class="p-3">ID</th>
+                                    <th class="p-3">Manzil</th>
+                                    <th class="p-3">Jami Summa</th>
+                                    <th class="p-3">Yetkazish Narxi</th>
+                                    <th class="p-3">Status</th>
+                                    <th class="p-3 text-center">Amallar</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y text-sm dark:divide-gray-700">
+                                {% for order in orders %}
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="p-3 font-bold">
+                                        <button type="button" data-order-id="{{ order.id }}" onclick="toggleOrderDetails(this.dataset.orderId)" class="text-indigo-600 dark:text-indigo-400">#{{ order.id }} 🔍</button>
+                                    </td>
+                                    <td class="p-3">{{ order.delivery_address }}</td>
+                                    <td class="theme-text p-3 font-semibold text-indigo-600 dark:text-indigo-400">{{ order.total_price }} so'm</td>
+                                    <td class="p-3 font-semibold">{{ order.delivery_fee }} so'm</td>
+                                    <td class="p-3">
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{{ status_labels.get(order.status.value, order.status.value) }}</span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <div class="flex flex-col gap-1 items-center">
+                                            {% if order.status.value in next_status_map %}
+                                            <form action="/admin/orders/{{ order.id }}/update" method="POST">
+                                                <input type="hidden" name="new_status" value="{{ next_status_map[order.status.value][0] }}">
+                                                <input type="hidden" name="courier_id" value="{{ order.courier_id or '' }}">
+                                                <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold whitespace-nowrap">{{ next_status_map[order.status.value][1] }}</button>
+                                            </form>
+                                            {% endif %}
+                                            <form action="/admin/orders/{{ order.id }}/update" method="POST" class="inline-flex gap-1">
+                                                <select name="courier_id" class="text-xs p-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                                    <option value="">Kuryer tanlang</option>
+                                                    {% for courier in couriers %}
+                                                    <option value="{{ courier.id }}" {% if order.courier_id == courier.id %}selected{% endif %}>{{ courier.full_name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                                    {% for st in order_statuses %}
+                                                    <option value="{{ st }}" {% if order.status.value == st %}selected{% endif %}>{{ status_labels.get(st, st) }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr id="order-details-{{ order.id }}" class="hidden bg-gray-50 dark:bg-gray-800/50">
+                                    <td colspan="6" class="p-3">
+                                        <p class="text-xs font-semibold mb-1">Buyurtma tarkibi:</p>
+                                        {% if order.items %}
+                                        <ul class="text-xs space-y-0.5">
+                                            {% for item in order.items %}
+                                            <li>• {{ item.product_name }} — {{ item.quantity }} x {{ item.unit_price }} so'm = {{ item.quantity * item.unit_price }} so'm</li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% else %}
+                                        <p class="text-xs text-gray-400">Bu buyurtma uchun mahsulot tarkibi saqlanmagan.</p>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="p-3 text-center text-gray-400 text-xs">Buyurtmalar mavjud emas</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. KURYERLAR -->
+            <section class="app-page" data-page="kuryerlar" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🛵 Yangi Kuryer Qo'shish</h2>
+                        <form action="/admin/couriers/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Ism Familiya</label>
+                                <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Telefon raqami</label>
+                                <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Transport turi</label>
+                                <select name="transport_type" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    <option value="walking">Piyoda</option>
+                                    <option value="bicycle">Velosiped</option>
+                                    <option value="scooter">Skuter</option>
+                                    <option value="car">Avtomobil</option>
+                                </select>
+                            </div>
+                            {% if is_owner %}
+                            <div>
+                                <label class="block text-xs font-medium">Shahar</label>
+                                <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Shaharni tanlang</option>
+                                    {% for city in all_cities %}
+                                    <option value="{{ city.id }}" {% if active_city_id == city.id %}selected{% endif %}>{{ city.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            {% endif %}
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Kuryerlar</h2>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                    <tr class="border-b dark:border-gray-700 text-xs">
+                                        <th class="p-2">Ism</th>
+                                        <th class="p-2">Telefon</th>
+                                        <th class="p-2">Transport</th>
+                                        {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
+                                        <th class="p-2">Balans</th>
+                                        <th class="p-2 text-center">Holat</th>
+                                        <th class="p-2 text-center">Amallar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y text-sm dark:divide-gray-700">
+                                    {% for courier in all_couriers %}
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                        <td class="p-2 font-medium">{{ courier.full_name }}</td>
+                                        <td class="p-2 text-xs">{{ courier.phone_number }}</td>
+                                        <td class="p-2 text-xs">
+                                            {% if courier.courier_profile %}{{ courier.courier_profile.transport_type }}{% endif %}
+                                        </td>
+                                        {% if is_owner %}<td class="p-2 text-xs">{{ courier.city.name if courier.city else '—' }}</td>{% endif %}
+                                        <td class="p-2 text-xs font-semibold text-green-700 dark:text-green-400">
+                                            {% if courier.courier_profile %}{{ "%.0f"|format(courier.courier_profile.balance) }} so'm{% endif %}
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if courier.is_active %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                                {% if courier.is_active %}Faol{% else %}Faol emas{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <div class="inline-flex gap-1">
+                                                <button type="button"
+                                                        data-id="{{ courier.id }}"
+                                                        data-name="{{ courier.full_name }}"
+                                                        data-phone="{{ courier.phone_number }}"
+                                                        data-transport="{{ courier.courier_profile.transport_type if courier.courier_profile else 'walking' }}"
+                                                        data-city-id="{{ courier.city_id or '' }}"
+                                                        onclick="openEditCourierModal(this)"
+                                                        class="text-blue-600 text-xs font-bold px-1">✏️</button>
+                                                <form action="/admin/couriers/{{ courier.id }}/toggle" method="POST" class="inline">
+                                                    <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
+                                                        {% if courier.is_active %}O'chirish{% else %}Yoqish{% endif %}
+                                                    </button>
+                                                </form>
+                                                <form action="/admin/couriers/{{ courier.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Kuryerni butunlay o\'chirmoqchimisiz?');">
+                                                    <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="7" class="p-3 text-center text-gray-400 text-xs">Hozircha kuryerlar yo'q</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. MIJOZLAR -->
+            <section class="app-page" data-page="mijozlar" style="display:none;">
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                    <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">👥 Mijozlar</h2>
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                <tr class="border-b dark:border-gray-700 text-xs">
+                                    <th class="p-2">Ism</th>
+                                    <th class="p-2">Telefon</th>
+                                    {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
+                                    <th class="p-2">Buyurtmalar soni</th>
+                                    <th class="p-2">Umumiy xarajat</th>
+                                    <th class="p-2 text-center">Holat</th>
+                                    <th class="p-2 text-center">Amallar</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y text-sm dark:divide-gray-700">
+                                {% for client, order_count, total_spent in clients %}
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="p-2 font-medium">{{ client.full_name }}</td>
+                                    <td class="p-2 text-xs">{{ client.phone_number }}</td>
+                                    {% if is_owner %}<td class="p-2 text-xs">{{ client.city.name if client.city else '—' }}</td>{% endif %}
+                                    <td class="p-2 text-center">{{ order_count }}</td>
+                                    <td class="p-2 text-xs font-semibold text-green-700 dark:text-green-400">{{ "%.0f"|format(total_spent) }} so'm</td>
+                                    <td class="p-2 text-center">
+                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if client.is_active %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                                            {% if client.is_active %}Faol{% else %}Bloklangan{% endif %}
+                                        </span>
+                                    </td>
+                                    <td class="p-2 text-center">
+                                        <form action="/admin/clients/{{ client.id }}/toggle" method="POST" class="inline">
+                                            <button type="submit" class="text-xs px-2 py-1 rounded {% if client.is_active %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %} font-semibold">
+                                                {% if client.is_active %}Bloklash{% else %}Blokdan chiqarish{% endif %}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. DO'KONLAR VA MAHSULOTLAR -->
+            <section class="app-page" data-page="dokonlar" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {% if is_owner %}
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🏪 Yangi Do'kon Qo'shish</h2>
+                        <form action="/admin/partners/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Do'kon Brend Nomi</label>
+                                <input type="text" name="brand_name" placeholder="Evos" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Kategoriya</label>
+                                <input type="text" name="category" placeholder="Fast Food" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Shahar</label>
+                                <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Shaharni tanlang</option>
+                                    {% for city in all_cities %}
+                                    <option value="{{ city.id }}">{{ city.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Manzil</label>
+                                <input type="text" name="address" placeholder="Mustaqillik ko'chasi, 5" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-medium">Komissiya (%)</label>
+                                    <input type="number" step="0.1" name="commission_rate" value="{{ system_setting.service_commission_percent if system_setting else 10.0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium">Ish vaqti</label>
+                                    <div class="flex gap-1 items-center mt-1">
+                                        <input type="text" name="opening_time" value="09:00" class="w-1/2 p-2 border rounded-lg text-xs dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                        <span>-</span>
+                                        <input type="text" name="closing_time" value="23:00" class="w-1/2 p-2 border rounded-lg text-xs dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border-t pt-3 mt-1 dark:border-gray-700">
+                                <p class="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-300">🔑 Hamkor kabineti (ixtiyoriy)</p>
+                                <input type="text" name="login_phone" placeholder="Telefon (+998...)" class="w-full mb-2 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                <input type="text" name="login_password" placeholder="Parol" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
+                        <form action="/admin/products/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Tegishli Do'kon</label>
+                                <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Do'konni tanlang</option>
+                                    {% for partner in partners %}
+                                    <option value="{{ partner.id }}">{{ partner.brand_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Mahsulot Nomi</label>
+                                <input type="text" name="name" placeholder="Lavash Pepperoni" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Narxi (so'm)</label>
+                                <input type="number" name="price" placeholder="35000" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Tavsifi</label>
+                                <input type="text" name="description" placeholder="Achchiq sous..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">+ Saqlash</button>
+                        </form>
+                    </div>
+                    {% endif %}
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 {% if not is_owner %}md:col-span-3{% endif %} dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Do'konlar va Mahsulotlar</h2>
+                        <div class="space-y-4 max-h-96 overflow-y-auto pr-1">
                             {% for partner in partners %}
-                            <option value="{{ partner.id }}">{{ partner.brand_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Mahsulot Nomi</label>
-                        <input type="text" name="name" placeholder="Lavash Pepperoni" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Narxi (so'm)</label>
-                        <input type="number" name="price" placeholder="35000" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium">Tavsifi</label>
-                        <input type="text" name="description" placeholder="Achchiq sous..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                    </div>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">+ Saqlash</button>
-                </form>
-            </div>
-            {% endif %}
-
-            <!-- Do'konlar va Mahsulotlar Ro'yxati -->
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Do'konlar va Mahsulotlar</h2>
-                <div class="space-y-4 max-h-96 overflow-y-auto pr-1">
-                    {% for partner in partners %}
-                    <div class="border rounded-lg p-3 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="font-bold text-sm">{{ partner.brand_name }}</span>
-                            <div class="flex items-center gap-1">
-                                {% if is_owner %}
-                                <button type="button" 
-                                        data-id="{{ partner.id }}"
-                                        data-name="{{ partner.brand_name }}"
-                                        data-category="{{ partner.category }}"
-                                        data-address="{{ partner.address }}"
-                                        data-commission="{{ partner.commission_rate }}"
-                                        data-open="{{ partner.opening_time }}"
-                                        data-close="{{ partner.closing_time }}"
-                                        data-city-id="{{ partner.city_id or '' }}"
-                                        onclick="openEditPartnerModal(this)" 
-                                        class="text-blue-600 text-xs font-bold px-1">✏️</button>
-                                {% endif %}
-                                <form action="/admin/partners/{{ partner.id }}/toggle" method="POST" class="inline">
-                                    <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if partner.is_open %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
-                                        {% if partner.is_open %}Ochiq{% else %}Yopiq{% endif %}
-                                    </button>
-                                </form>
-                                {% if is_owner %}
-                                <form action="/admin/partners/{{ partner.id }}/delete" method="POST" class="inline">
-                                    <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <p class="text-[11px] text-gray-500">📍 {{ partner.address }} {% if partner.city %}| 🏙️ {{ partner.city.name }}{% endif %} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }} | 🏷️ {{ partner.commission_rate }}%{% if is_owner %} | 💰 {{ "%.0f"|format(partner.balance) }} so'm{% endif %}</p>
-                        
-                        <div class="divide-y dark:divide-gray-700 border-t dark:border-gray-700 pt-2 mt-2">
-                            {% for product in products %}
-                                {% if product.partner_id == partner.id %}
-                                <div class="py-1.5 flex justify-between items-center text-xs">
-                                    <div>
-                                        <p class="font-medium">{{ product.name }}</p>
-                                        <p class="text-green-600 font-bold">{{ product.price }} so'm</p>
-                                    </div>
+                            <div class="border rounded-lg p-3 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold text-sm">{{ partner.brand_name }}</span>
                                     <div class="flex items-center gap-1">
                                         {% if is_owner %}
                                         <button type="button" 
-                                                data-id="{{ product.id }}"
-                                                data-name="{{ product.name }}"
-                                                data-price="{{ product.price }}"
-                                                data-desc="{{ product.description or '' }}"
-                                                onclick="openEditProductModal(this)" 
-                                                class="text-blue-600 font-bold px-1 text-xs">✏️</button>
+                                                data-id="{{ partner.id }}"
+                                                data-name="{{ partner.brand_name }}"
+                                                data-category="{{ partner.category }}"
+                                                data-address="{{ partner.address }}"
+                                                data-commission="{{ partner.commission_rate }}"
+                                                data-open="{{ partner.opening_time }}"
+                                                data-close="{{ partner.closing_time }}"
+                                                data-city-id="{{ partner.city_id or '' }}"
+                                                onclick="openEditPartnerModal(this)" 
+                                                class="text-blue-600 text-xs font-bold px-1">✏️</button>
                                         {% endif %}
-                                        <form action="/admin/products/{{ product.id }}/toggle" method="POST" class="inline">
-                                            <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] {% if product.is_available %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                                                {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
+                                        <form action="/admin/partners/{{ partner.id }}/toggle" method="POST" class="inline">
+                                            <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if partner.is_open %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                                {% if partner.is_open %}Ochiq{% else %}Yopiq{% endif %}
                                             </button>
                                         </form>
                                         {% if is_owner %}
-                                        <form action="/admin/products/{{ product.id }}/delete" method="POST" class="inline">
-                                            <button type="submit" class="text-red-600 font-bold px-1">✕</button>
+                                        <form action="/admin/partners/{{ partner.id }}/delete" method="POST" class="inline">
+                                            <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
                                         </form>
                                         {% endif %}
                                     </div>
                                 </div>
-                                {% endif %}
+                                <p class="text-[11px] text-gray-500 dark:text-gray-400">📍 {{ partner.address }} {% if partner.city %}| 🏙️ {{ partner.city.name }}{% endif %} | 🕒 {{ partner.opening_time }}-{{ partner.closing_time }}</p>
+                                
+                                <div class="divide-y dark:divide-gray-700 border-t dark:border-gray-700 pt-2 mt-2">
+                                    {% for product in products %}
+                                        {% if product.partner_id == partner.id %}
+                                        <div class="py-1.5 flex justify-between items-center text-xs">
+                                            <div>
+                                                <p class="font-medium">{{ product.name }}</p>
+                                                <p class="text-green-600 font-bold dark:text-green-400">{{ product.price }} so'm</p>
+                                            </div>
+                                            <div class="flex items-center gap-1">
+                                                {% if is_owner %}
+                                                <button type="button" 
+                                                        data-id="{{ product.id }}"
+                                                        data-name="{{ product.name }}"
+                                                        data-price="{{ product.price }}"
+                                                        data-desc="{{ product.description or '' }}"
+                                                        onclick="openEditProductModal(this)" 
+                                                        class="text-blue-600 font-bold px-1 text-xs">✏️</button>
+                                                {% endif %}
+                                                <form action="/admin/products/{{ product.id }}/toggle" method="POST" class="inline">
+                                                    <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] {% if product.is_available %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                                                        {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
+                                                    </button>
+                                                </form>
+                                                {% if is_owner %}
+                                                <form action="/admin/products/{{ product.id }}/delete" method="POST" class="inline">
+                                                    <button type="submit" class="text-red-600 font-bold px-1">✕</button>
+                                                </form>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
                             {% endfor %}
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
-            </div>
+            </section>
 
-        </div>
-
-        {% if is_owner %}
-</section>
-
-        <section class="app-page" data-page="xavfzone" style="display:none;">
-        <!-- XAVF ZONASI (faqat OWNER) -->
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md border-2 border-red-500">
-            <h2 class="text-lg font-bold mb-2 text-red-600">⚠️ Xavf Zonasi — Tizimni Tozalash</h2>
-            <p class="text-xs text-gray-500 mb-4">
-                Bu tugma <strong>barcha buyurtmalar, mijozlar, kuryerlar, do'konlar, mahsulotlar va tranzaksiyalarni butunlay o'chiradi</strong>
-                — tizim shaharlar va sizning OWNER akkauntingiz bilan "sof holatga" qaytadi. Faqat sinovdan keyin, haqiqiy ishga
-                tushirishdan oldin tozalash uchun ishlating. <strong>Bu amalni orqaga qaytarib bo'lmaydi!</strong>
-            </p>
-            <form action="/admin/reset" method="POST" onsubmit="return confirm('DIQQAT: bu amal barcha buyurtma, mijoz, kuryer, do\'kon va tranzaksiyalarni BUTUNLAY o\'chiradi va ORQAGA QAYTARIB BO\'LMAYDI. Rostdan ham davom etasizmi?');" class="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
-                <div class="flex-1">
-                    <label class="block text-xs font-medium">Tasdiqlash uchun katta harflarda yozing: <strong>TOZALASH</strong></label>
-                    <input type="text" name="confirmation" placeholder="TOZALASH" class="w-full mt-1 p-2 border-2 border-red-300 rounded-lg text-sm" required>
-                </div>
-                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-bold text-sm whitespace-nowrap">🗑️ Hammasini Tozalash</button>
-            </form>
-        </div>
-        {% endif %}
-</section>
-
-        <!-- TUG'ILGAN KUNLAR -->
-        <section class="app-page" data-page="tugilgankun" style="display:none;">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎂 Bugun Tug'ilgan Kuni Bo'lgan Mijozlar</h2>
-                <p class="text-xs text-gray-500 mb-3">Bu ro'yxat avtomatik — mijoz profilida tug'ilgan sana kiritilgan bo'lsa va bugun o'sha kun bo'lsa, shu yerda chiqadi.</p>
-                <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="sticky top-0 bg-gray-100 dark:bg-gray-700">
-                            <tr class="border-b text-xs">
-                                <th class="p-2">Ism</th>
-                                <th class="p-2">Telefon</th>
-                                <th class="p-2">Yosh</th>
-                                <th class="p-2 text-center">Amal</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y text-sm dark:divide-gray-700">
-                            {% for client in birthday_clients_today %}
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                                <td class="p-2 font-medium">🎉 {{ client.full_name }}</td>
-                                <td class="p-2 text-xs">{{ client.phone_number }}</td>
-                                <td class="p-2 text-xs">{{ client.age }} yosh</td>
-                                <td class="p-2 text-center">
-                                    {% if is_owner %}
-                                    <form action="/admin/clients/{{ client.id }}/birthday-bonus" method="POST" class="inline">
-                                        <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold">🎁 Bonus berildi deb belgilash</button>
-                                    </form>
+            <!-- 6. TUG'ILGAN KUNLAR -->
+            <section class="app-page" data-page="tugilgankun" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎂 Bugun Tug'ilgan Kuni Bo'lgan Mijozlar</h2>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                    <tr class="border-b dark:border-gray-700 text-xs">
+                                        <th class="p-2">Ism</th>
+                                        <th class="p-2">Telefon</th>
+                                        <th class="p-2">Yosh</th>
+                                        <th class="p-2 text-center">Amal</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y text-sm dark:divide-gray-700">
+                                    {% for client in birthday_clients_today %}
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                        <td class="p-2 font-medium">🎉 {{ client.full_name }}</td>
+                                        <td class="p-2 text-xs">{{ client.phone_number }}</td>
+                                        <td class="p-2 text-xs">{{ client.age }} yosh</td>
+                                        <td class="p-2 text-center">
+                                            {% if is_owner %}
+                                            <form action="/admin/clients/{{ client.id }}/birthday-bonus" method="POST" class="inline">
+                                                <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold">🎁 Bonus berildi deb belgilash</button>
+                                            </form>
+                                            {% else %}
+                                            <span class="text-[11px] text-gray-400">Faqat egasi belgilay oladi</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
                                     {% else %}
-                                    <span class="text-[11px] text-gray-400">Faqat egasi belgilay oladi</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="4" class="p-3 text-center text-gray-400 text-xs">Bugun tug'ilgan kuni bo'lgan mijoz yo'q</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {% if is_owner %}
-            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
-                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tug'ilgan Kun Bonusi Sozlamasi</h2>
-                <form action="/admin/settings/birthday" method="POST" class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium">Bonus summasi (so'm)</label>
-                        <input type="number" name="birthday_bonus_amount" value="{{ system_setting.birthday_bonus_amount if system_setting else 0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
-                        <p class="text-[11px] text-gray-500 mt-1">Mijoz tug'ilgan kunida qancha bonus berilishini shu yerda belgilaysiz. Faqat siz o'zgartira olasiz.</p>
+                                    <tr><td colspan="4" class="p-3 text-center text-gray-400 text-xs">Bugun tug'ilgan kuni bo'lgan mijoz yo'q</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Saqlash</button>
-                </form>
-            </div>
-            {% endif %}
-        </div>
-        </section>
 
-        <!-- REFERAL DASTURI -->
-        <section class="app-page" data-page="referal" style="display:none;">
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎁 Referal Dasturi</h2>
-            {% if is_owner %}
-            <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
-            <form action="/admin/settings/referral" method="POST" class="space-y-3">
-                <textarea name="referral_program_text" rows="10" placeholder="Masalan: Do'stingizni taklif qiling, u birinchi buyurtma bersa - ikkalangiz ham 10 000 so'm bonus olasiz..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else '' }}</textarea>
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
-            </form>
-            {% else %}
-            <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg min-h-[100px]">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else "Hozircha referal dasturi kiritilmagan." }}</div>
-            <p class="text-[11px] text-gray-400 mt-2">Bu bo'limni faqat egasi tahrirlay oladi.</p>
-            {% endif %}
-        </div>
-        </section>
+                    {% if is_owner %}
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">⚙️ Tug'ilgan Kun Bonusi Sozlamasi</h2>
+                        <form action="/admin/settings/birthday" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Bonus summasi (so'm)</label>
+                                <input type="number" name="birthday_bonus_amount" value="{{ system_setting.birthday_bonus_amount if system_setting else 0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">Saqlash</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
 
-        <!-- BONUS VA CASHBACK -->
-        <section class="app-page" data-page="bonuscashback" style="display:none;">
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💸 Bonus va Cashback</h2>
+            <!-- 7. REFERAL DASTURI -->
+            <section class="app-page" data-page="referal" style="display:none;">
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                    <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🎁 Referal Dasturi</h2>
+                    {% if is_owner %}
+                    <form action="/admin/settings/referral" method="POST" class="space-y-3">
+                        <textarea name="referral_program_text" rows="8" class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else '' }}</textarea>
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+                    </form>
+                    {% else %}
+                    <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else "Hozircha referal dasturi kiritilmagan." }}</div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- 8. BONUS VA CASHBACK -->
+            <section class="app-page" data-page="bonuscashback" style="display:none;">
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md dark:bg-gray-900">
+                    <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💸 Bonus va Cashback</h2>
+                    {% if is_owner %}
+                    <form action="/admin/settings/cashback" method="POST" class="space-y-3">
+                        <textarea name="bonus_cashback_text" rows="8" class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else '' }}</textarea>
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+                    </form>
+                    {% else %}
+                    <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else "Hozircha bonus/cashback dasturi kiritilmagan." }}</div>
+                    {% endif %}
+                </div>
+            </section>
+
             {% if is_owner %}
-            <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
-            <form action="/admin/settings/cashback" method="POST" class="space-y-3">
-                <textarea name="bonus_cashback_text" rows="10" placeholder="Masalan: Har bir buyurtmadan 2% cashback qaytariladi, ballarni keyingi buyurtmada ishlatish mumkin..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else '' }}</textarea>
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
-            </form>
-            {% else %}
-            <div class="text-sm whitespace-pre-wrap p-3 bg-gray-50 dark:bg-gray-800 rounded-lg min-h-[100px]">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else "Hozircha bonus/cashback dasturi kiritilmagan." }}</div>
-            <p class="text-[11px] text-gray-400 mt-2">Bu bo'limni faqat egasi tahrirlay oladi.</p>
+            <!-- 9. SHAHARLAR BOSHQARUVI (FAQT OWNER) -->
+            <section class="app-page" data-page="shaharlar" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🏙️ Yangi Shahar Qo'shish</h2>
+                        <form action="/admin/cities/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Shahar Nomi</label>
+                                <input type="text" name="name" placeholder="Masalan: Urganch" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Shahar Qo'shish</button>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Shaharlar</h2>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                    <tr class="border-b dark:border-gray-700 text-xs">
+                                        <th class="p-2">ID</th>
+                                        <th class="p-2">Shahar Nomi</th>
+                                        <th class="p-2 text-center">Holat</th>
+                                        <th class="p-2 text-center">Amallar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y text-sm dark:divide-gray-700">
+                                    {% for city in all_cities %}
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                        <td class="p-2 text-xs font-bold">#{{ city.id }}</td>
+                                        <td class="p-2 font-semibold">{{ city.name }}</td>
+                                        <td class="p-2 text-center">
+                                            <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Faol</span>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <form action="/admin/cities/{{ city.id }}/delete" method="POST" class="inline" onsubmit="return confirm(`Ushbu shaharni o'chirmoqchimisiz? Aloqador do'kon va kuryerlarham ta'sirlanishi mumkin!`);">
+                                                <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️ O'chirish</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="p-3 text-center text-gray-400 text-xs">Hozircha shaharlar yo'q</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 10. APP REKLAMALARI (FAQT OWNER) -->
+            <section class="app-page" data-page="reklamalar" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🖼️ Yangi Reklama Qo'shish</h2>
+                        <form action="/admin/promos/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Reklama Sarlavhasi</label>
+                                <input type="text" name="title" placeholder="Aksiya! Lavashlarga 20% chegirma" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Rasm URL havolasi</label>
+                                <input type="url" name="image_url" placeholder="https://domain.uz/images/banner.jpg" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">O'tish havolasi / Action Link (ixtiyoriy)</label>
+                                <input type="text" name="link_url" placeholder="https://... yoki partner/12" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Shahar</label>
+                                <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    <option value="">Barcha shaharlar uchun</option>
+                                    {% for city in all_cities %}
+                                    <option value="{{ city.id }}">{{ city.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Banner Yaratish</button>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Mavjud App Banners / Reklamalar</h2>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                    <tr class="border-b dark:border-gray-700 text-xs">
+                                        <th class="p-2">Rasm</th>
+                                        <th class="p-2">Sarlavha</th>
+                                        <th class="p-2">Shahar</th>
+                                        <th class="p-2 text-center">Holat</th>
+                                        <th class="p-2 text-center">Amallar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y text-sm dark:divide-gray-700">
+                                    {% for promo in promo_banners %}
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                        <td class="p-2">
+                                            <img src="{{ promo.image_url }}" alt="Banner" class="h-10 w-16 object-cover rounded shadow">
+                                        </td>
+                                        <td class="p-2 font-medium">
+                                            {{ promo.title }}
+                                            {% if promo.link_url %}<br><span class="text-[10px] text-gray-400">🔗 {{ promo.link_url }}</span>{% endif %}
+                                        </td>
+                                        <td class="p-2 text-xs">{{ promo.city.name if promo.city else 'Barchasi' }}</td>
+                                        <td class="p-2 text-center">
+                                            <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if promo.is_active %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                                {% if promo.is_active %}Faol{% else %}Nofaol{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <div class="inline-flex gap-1">
+                                                <form action="/admin/promos/{{ promo.id }}/toggle" method="POST" class="inline">
+                                                    <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
+                                                        {% if promo.is_active %}O'chirish{% else %}Yoqish{% endif %}
+                                                    </button>
+                                                </form>
+                                                <form action="/admin/promos/{{ promo.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Bannerni butunlay o\'chirmoqchimisiz?');">
+                                                    <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="5" class="p-3 text-center text-gray-400 text-xs">Hozircha reklamalar mavjud emas</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 11. OPERATORLAR (FAQT OWNER) -->
+            <section class="app-page" data-page="operatorlar" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🧑‍💼 Yangi Operator Qo'shish</h2>
+                        <form action="/admin/operators/create" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Ism Familiya</label>
+                                <input type="text" name="full_name" placeholder="Aziz Karimov" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Telefon raqami (login)</label>
+                                <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Parol</label>
+                                <input type="password" name="password" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Biriktirilgan shahar</label>
+                                <select name="city_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Shaharni tanlang</option>
+                                    {% for city in all_cities %}
+                                    <option value="{{ city.id }}">{{ city.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Operatorlar</h2>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                    <tr class="border-b dark:border-gray-700 text-xs">
+                                        <th class="p-2">Ism</th>
+                                        <th class="p-2">Telefon</th>
+                                        <th class="p-2">Shahar</th>
+                                        <th class="p-2 text-center">Holat</th>
+                                        <th class="p-2 text-center">Amallar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y text-sm dark:divide-gray-700">
+                                    {% for operator in operators %}
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                        <td class="p-2 font-medium">{{ operator.full_name }}</td>
+                                        <td class="p-2 text-xs">{{ operator.phone_number }}</td>
+                                        <td class="p-2 text-xs">{{ operator.city.name if operator.city else '—' }}</td>
+                                        <td class="p-2 text-center">
+                                            <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if operator.is_active %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                                {% if operator.is_active %}Faol{% else %}Faol emas{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <div class="inline-flex gap-1">
+                                                <form action="/admin/operators/{{ operator.id }}/toggle" method="POST" class="inline">
+                                                    <button type="submit" class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">
+                                                        {% if operator.is_active %}O'chirish{% else %}Yoqish{% endif %}
+                                                    </button>
+                                                </form>
+                                                <form action="/admin/operators/{{ operator.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Operatorni butunlay o\'chirmoqchimisiz?');">
+                                                    <button type="submit" class="text-red-600 font-bold px-1 text-xs">🗑️</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="5" class="p-3 text-center text-gray-400 text-xs">Hozircha operatorlar yo'q</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 12. MOLIYA (FAQT OWNER) -->
+            <section class="app-page" data-page="moliya" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Kuryer Balansi</h2>
+                        <form action="/admin/finance/courier" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Kuryer</label>
+                                <select name="user_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Kuryerni tanlang</option>
+                                    {% for c in all_couriers %}
+                                    <option value="{{ c.id }}">{{ c.full_name }} ({{ "%.0f"|format(c.courier_profile.balance) if c.courier_profile else 0 }} so'm)</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Summa (so'm)</label>
+                                <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Izoh</label>
+                                <input type="text" name="note" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
+                                <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Hamkor Balansi</h2>
+                        <form action="/admin/finance/partner" method="POST" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium">Do'kon</label>
+                                <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                                    <option value="">Do'konni tanlang</option>
+                                    {% for p in partners %}
+                                    <option value="{{ p.id }}">{{ p.brand_name }} ({{ "%.0f"|format(p.balance) }} so'm)</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Summa (so'm)</label>
+                                <input type="number" name="amount" min="1" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium">Izoh</label>
+                                <input type="text" name="note" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="submit" name="action" value="deposit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ To'ldirish</button>
+                                <button type="submit" name="action" value="withdraw" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">− Yechish</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 dark:bg-gray-900">
+                        <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📜 Tranzaksiyalar Tarixi</h2>
+                        <div class="overflow-y-auto max-h-80 space-y-2">
+                            {% for tx in recent_transactions %}
+                            <div class="text-xs border-b pb-2 dark:border-gray-700">
+                                <div class="flex justify-between">
+                                    <span class="font-semibold">
+                                        {% if tx.user %}🛵 {{ tx.user.full_name }}{% elif tx.partner %}🏪 {{ tx.partner.brand_name }}{% else %}—{% endif %}
+                                    </span>
+                                    <span class="font-bold {% if tx.type.value == 'deposit' %}text-green-600{% else %}text-red-600{% endif %}">
+                                        {% if tx.type.value == 'deposit' %}+{% else %}−{% endif %}{{ "%.0f"|format(tx.amount) }}
+                                    </span>
+                                </div>
+                                <p class="text-gray-400">{{ tx.note or '—' }} · {{ tx.created_at.strftime('%d.%m %H:%M') }}</p>
+                            </div>
+                            {% else %}
+                            <p class="text-xs text-gray-400 text-center">Hozircha tranzaksiya yo'q</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 13. XAVF ZONASI (FAQT OWNER) -->
+            <section class="app-page" data-page="xavfzone" style="display:none;">
+                <div class="card-bg bg-white p-6 rounded-xl shadow-md border-2 border-red-500 dark:bg-gray-900">
+                    <h2 class="text-lg font-bold mb-2 text-red-600">⚠️ Xavf Zonasi — Tizimni Tozalash</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        Bu tugma barcha buyurtmalar, mijozlar, kuryerlar, do'konlar, mahsulotlar va tranzaksiyalarni o'chirib, tizimni toza holatga qaytaradi.
+                    </p>
+                    <form action="/admin/reset" method="POST" onsubmit="return confirm('DIQQAT: bu amal barcha ma\'lumotlarni BUTUNLAY o\'chiradi! Davom etasizmi?');" class="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
+                        <div class="flex-1">
+                            <label class="block text-xs font-medium">Tasdiqlash uchun yozing: <strong>TOZALASH</strong></label>
+                            <input type="text" name="confirmation" placeholder="TOZALASH" class="w-full mt-1 p-2 border-2 border-red-300 rounded-lg text-sm dark:bg-gray-800 dark:text-white" required>
+                        </div>
+                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-bold text-sm whitespace-nowrap">🗑️ Hammasini Tozalash</button>
+                    </form>
+                </div>
+            </section>
             {% endif %}
-        </div>
-        </section>
 
         </main>
     </div>
 
-    <!-- TAHRIRLASH MODALLARI -->
+    <!-- MODALLAR -->
     <div id="edit-partner-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-md w-full">
             <h3 class="font-bold text-lg mb-4 dark:text-white">Do'konni Tahrirlash</h3>
@@ -985,18 +1093,13 @@
         </div>
     </div>
 
-    <!-- Mahsulotlar ma'lumoti - JS kod ichida emas, alohida JSON blok sifatida.
-         Bu ham VS Code kabi muharrirlarni chalg'itmaydi, ham xavfsizroq usul. -->
     <script type="application/json" id="products-data">{{ products_json | safe }}</script>
 
     <script>
-        // Barcha mavjud mahsulotlar (do'kon bo'yicha filtrlash uchun) — yuqoridagi JSON blokdan o'qiladi
-        const allProducts = JSON.parse(document.getElementById('products-data').textContent);
+        const allProducts = JSON.parse(document.getElementById('products-data').textContent || '[]');
         let orderItemRowCounter = 0;
 
         function onPartnerChange() {
-            // Do'kon almashtirilganda, avval qo'shilgan qatorlarni tozalaymiz —
-            // chunki ular boshqa do'konning mahsulotlariga tegishli bo'lishi mumkin
             document.getElementById('order-items-container').innerHTML = '';
             orderItemRowCounter = 0;
             updateOrderItemsHint();
@@ -1024,7 +1127,6 @@
 
             orderItemRowCounter++;
             const rowId = `order-item-row-${orderItemRowCounter}`;
-
             const row = document.createElement('div');
             row.id = rowId;
             row.className = 'flex gap-2 items-center';
@@ -1032,10 +1134,10 @@
             const options = partnerProducts.map(p => `<option value="${p.id}" data-price="${p.price}">${p.name} — ${p.price} so'm</option>`).join('');
 
             row.innerHTML = `
-                <select name="product_ids" class="flex-1 p-2 border rounded-lg text-sm dark:bg-gray-800" onchange="calculateEstimatedTotal()">
+                <select name="product_ids" class="flex-1 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" onchange="calculateEstimatedTotal()">
                     ${options}
                 </select>
-                <input type="number" name="quantities" value="1" min="1" class="w-16 p-2 border rounded-lg text-sm dark:bg-gray-800" onchange="calculateEstimatedTotal()">
+                <input type="number" name="quantities" value="1" min="1" class="w-16 p-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" onchange="calculateEstimatedTotal()">
                 <button type="button" onclick="document.getElementById('${rowId}').remove(); updateOrderItemsHint(); calculateEstimatedTotal();" class="text-red-600 text-xs font-bold px-1">✕</button>
             `;
 
@@ -1060,57 +1162,36 @@
 
         function toggleOrderDetails(orderId) {
             const row = document.getElementById(`order-details-${orderId}`);
-            row.classList.toggle('hidden');
+            if (row) row.classList.toggle('hidden');
         }
 
         function openEditPartnerModal(btn) {
-            const id = btn.dataset.id;
-            const name = btn.dataset.name;
-            const category = btn.dataset.category;
-            const address = btn.dataset.address;
-            const commission = btn.dataset.commission;
-            const open = btn.dataset.open;
-            const close = btn.dataset.close;
-            const cityId = btn.dataset.cityId;
-
-            document.getElementById('edit-partner-form').action = `/admin/partners/${id}/update`;
-            document.getElementById('edit-partner-name').value = name;
-            document.getElementById('edit-partner-category').value = category;
-            document.getElementById('edit-partner-city').value = cityId;
-            document.getElementById('edit-partner-address').value = address;
-            document.getElementById('edit-partner-commission').value = commission;
-            document.getElementById('edit-partner-open').value = open;
-            document.getElementById('edit-partner-close').value = close;
+            document.getElementById('edit-partner-form').action = `/admin/partners/${btn.dataset.id}/update`;
+            document.getElementById('edit-partner-name').value = btn.dataset.name;
+            document.getElementById('edit-partner-category').value = btn.dataset.category;
+            document.getElementById('edit-partner-city').value = btn.dataset.cityId;
+            document.getElementById('edit-partner-address').value = btn.dataset.address;
+            document.getElementById('edit-partner-commission').value = btn.dataset.commission;
+            document.getElementById('edit-partner-open').value = btn.dataset.open;
+            document.getElementById('edit-partner-close').value = btn.dataset.close;
             document.getElementById('edit-partner-modal').classList.remove('hidden');
         }
 
         function openEditProductModal(btn) {
-            const id = btn.dataset.id;
-            const name = btn.dataset.name;
-            const price = btn.dataset.price;
-            const desc = btn.dataset.desc;
-
-            document.getElementById('edit-product-form').action = `/admin/products/${id}/update`;
-            document.getElementById('edit-product-name').value = name;
-            document.getElementById('edit-product-price').value = price;
-            document.getElementById('edit-product-desc').value = desc;
+            document.getElementById('edit-product-form').action = `/admin/products/${btn.dataset.id}/update`;
+            document.getElementById('edit-product-name').value = btn.dataset.name;
+            document.getElementById('edit-product-price').value = btn.dataset.price;
+            document.getElementById('edit-product-desc').value = btn.dataset.desc;
             document.getElementById('edit-product-modal').classList.remove('hidden');
         }
 
         function openEditCourierModal(btn) {
-            const id = btn.dataset.id;
-            const name = btn.dataset.name;
-            const phone = btn.dataset.phone;
-            const transport = btn.dataset.transport;
-            const cityId = btn.dataset.cityId;
-
-            document.getElementById('edit-courier-form').action = `/admin/couriers/${id}/update`;
-            document.getElementById('edit-courier-name').value = name;
-            document.getElementById('edit-courier-phone').value = phone;
-            document.getElementById('edit-courier-transport').value = transport;
-            // Shahar select faqat OWNER uchun renderlanadi, shuning uchun mavjudligini tekshiramiz
+            document.getElementById('edit-courier-form').action = `/admin/couriers/${btn.dataset.id}/update`;
+            document.getElementById('edit-courier-name').value = btn.dataset.name;
+            document.getElementById('edit-courier-phone').value = btn.dataset.phone;
+            document.getElementById('edit-courier-transport').value = btn.dataset.transport;
             const cityEl = document.getElementById('edit-courier-city');
-            if (cityEl) cityEl.value = cityId;
+            if (cityEl) cityEl.value = btn.dataset.cityId;
             document.getElementById('edit-courier-modal').classList.remove('hidden');
         }
 
@@ -1120,27 +1201,14 @@
             document.getElementById('edit-courier-modal').classList.add('hidden');
         }
 
-        // Ob-havo sharoitiga qarab yetkazish narxi necha barobar oshishi.
-        // Bu — boshlang'ich taklif, real buyurtmalar tajribasiga qarab keyin o'zgartirilishi mumkin:
-        // - clear (oddiy kun): koeffitsiyent oshmaydi, chunki kuryer uchun qo'shimcha qiyinchilik yo'q
-        // - hot/cold (issiq/sovuq): kuryer uchun jismoniy og'irroq, +50%
-        // - windy (shamolli): ayniqsa velosiped/skuterga xalaqit beradi, +30%
-        // - rain (yomg'ir): harakat sekinlashadi, kiyim-jihoz kerak, +80%
-        // - snow (qor): eng og'ir va xavfli sharoit, +100%
-        const weatherMultipliers = {
-            clear: 1.0,
-            hot: 1.5,
-            cold: 1.5,
-            windy: 1.3,
-            rain: 1.8,
-            snow: 2.0
-        };
+        const weatherMultipliers = { clear: 1.0, hot: 1.5, cold: 1.5, windy: 1.3, rain: 1.8, snow: 2.0 };
 
         function applyWeatherMultiplier() {
             const select = document.getElementById('weather-select');
             const input = document.getElementById('weather-multiplier-input');
-            const selected = select.value;
-            input.value = (weatherMultipliers[selected] !== undefined ? weatherMultipliers[selected] : 1.0).toFixed(1);
+            if (select && input) {
+                input.value = (weatherMultipliers[select.value] || 1.0).toFixed(1);
+            }
         }
 
         const themes = {
@@ -1153,41 +1221,29 @@
         function setTheme(themeName) {
             const body = document.getElementById('app-body');
             const header = document.getElementById('main-header');
-            const titles = document.querySelectorAll('.theme-title');
-            const buttons = document.querySelectorAll('.theme-btn');
-            const themeTexts = document.querySelectorAll('.theme-text');
-            const statNumbers = document.querySelectorAll('.theme-stat-number');
-            const cards = document.querySelectorAll('.card-bg');
+            if (!body || !header) return;
 
             if (themeName === 'dark') {
                 body.classList.add('dark', 'bg-gray-950', 'text-gray-100');
                 body.classList.remove('bg-gray-100', 'text-gray-800');
-                cards.forEach(card => card.classList.add('dark:bg-gray-900', 'dark:text-white'));
             } else {
                 body.classList.remove('dark', 'bg-gray-950', 'text-gray-100');
                 body.classList.add('bg-gray-100', 'text-gray-800');
             }
 
-            header.className = `${themes[themeName].header} text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300`;
-            titles.forEach(t => t.className = `theme-title text-lg font-bold mb-4 ${themes[themeName].text} transition-colors duration-300`);
-            themeTexts.forEach(t => t.className = `theme-text p-3 font-semibold ${themes[themeName].text}`);
-            statNumbers.forEach(t => t.className = `theme-stat-number text-3xl font-extrabold mt-1 ${themes[themeName].text}`);
-            buttons.forEach(b => b.className = `theme-btn ${themes[themeName].btn} text-white py-2 rounded-lg font-bold transition`);
-
+            header.className = `${themes[themeName].header} text-white p-4 shadow-md flex flex-wrap justify-between items-center gap-4 transition-colors duration-300`;
             localStorage.setItem('admin_theme', themeName);
         }
 
         function showPage(pageName) {
             document.querySelectorAll('.app-page').forEach(el => { el.style.display = 'none'; });
             const target = document.querySelector(`.app-page[data-page="${pageName}"]`);
-            // Agar sahifa OWNER-only bo'lib, operator uchun Jinja tomonidan
-            // umuman renderlanmagan bo'lsa, target topilmaydi — shunda
-            // xato bermasdan bosh sahifaga qaytamiz.
             if (target) {
                 target.style.display = '';
-            } else if (pageName !== 'bosh') {
-                showPage('bosh');
-                return;
+            } else {
+                const defaultPage = document.querySelector('.app-page[data-page="bosh"]');
+                if (defaultPage) defaultPage.style.display = '';
+                pageName = 'bosh';
             }
 
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -1202,8 +1258,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
-            setTheme(savedTheme);
+            setTheme(localStorage.getItem('admin_theme') || 'indigo');
             applyWeatherMultiplier();
             showPage(localStorage.getItem('admin_active_page') || 'bosh');
         });

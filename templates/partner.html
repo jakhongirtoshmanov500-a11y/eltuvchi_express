@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ partner.brand_name }} — Hamkor Kabineti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-indigo-700 text-white p-4 flex justify-between items-center shadow-md">
+        <div>
+            <h1 class="text-lg font-bold">🏪 {{ partner.brand_name }}</h1>
+            <p class="text-xs text-indigo-200">{{ current_user.full_name }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="toggle-partner-btn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors {% if partner.is_open %}bg-green-500{% else %}bg-gray-500{% endif %}">
+                {% if partner.is_open %}🟢 Ochiq{% else %}🔴 Yopiq{% endif %}
+            </button>
+            <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
+        </div>
+    </header>
+
+    <div class="container mx-auto mt-6 p-4 space-y-6 max-w-3xl">
+
+        <!-- BALANS -->
+        <div class="bg-white p-4 rounded-xl shadow-md flex justify-between items-center">
+            <span class="text-sm text-gray-500">💰 Joriy balansingiz</span>
+            <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance) }} so'm</span>
+        </div>
+
+        <!-- BUYURTMALAR -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar</h2>
+            <div class="space-y-3">
+                {% for order in orders %}
+                <div class="border rounded-lg p-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="font-bold text-sm">#{{ order.id }}</span>
+                            <span class="text-xs text-gray-400 ml-2">{{ order.created_at.strftime('%d.%m %H:%M') }}</span>
+                        </div>
+                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
+                            {{ status_labels.get(order.status.value, order.status.value) }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">📍 {{ order.delivery_address }}</p>
+                    <ul class="text-xs space-y-0.5 mb-2">
+                        {% for item in order.items %}
+                        <li>• {{ item.product_name }} — {{ item.quantity }} x {{ item.unit_price }} so'm</li>
+                        {% endfor %}
+                    </ul>
+                    <p class="text-sm font-bold mb-2">Jami: {{ order.total_price }} so'm</p>
+
+                    <!-- STATUS MANTIQLARI VA TUGMALARI -->
+                    {% if order.status.value == 'created' %}
+                    <div class="flex gap-2">
+                        <button type="button" data-action="order-status" data-order-id="{{ order.id }}" data-status="accepted_by_partner" class="flex-1 bg-green-600 text-white py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 transition">✅ Qabul qilish</button>
+                        <button type="button" data-action="order-status" data-order-id="{{ order.id }}" data-status="cancelled" class="flex-1 bg-red-100 text-red-700 py-1.5 rounded-lg text-xs font-bold hover:bg-red-200 transition">✕ Rad etish</button>
+                    </div>
+                    {% elif order.status.value == 'accepted_by_partner' %}
+                    <button type="button" data-action="order-status" data-order-id="{{ order.id }}" data-status="preparing" class="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 transition">🍳 Tayyorlashni boshladim</button>
+                    {% elif order.status.value == 'preparing' %}
+                    <button type="button" data-action="order-status" data-order-id="{{ order.id }}" data-status="looking_for_courier" class="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 transition">📦 Tayyor — kuryer kerak</button>
+                    {% elif order.status.value == 'looking_for_courier' %}
+                    <div class="bg-amber-50 text-amber-800 border border-amber-200 p-2 rounded-lg text-xs text-center font-medium">
+                        🛵 Kuryer qidirilmoqda...
+                    </div>
+                    {% elif order.status.value == 'on_the_way' %}
+                    <div class="bg-blue-50 text-blue-800 border border-blue-200 p-2 rounded-lg text-xs text-center font-medium">
+                        🚚 Buyurtma kuryer orqali yo'lda
+                    </div>
+                    {% elif order.status.value == 'delivered' %}
+                    <div class="bg-green-50 text-green-800 border border-green-200 p-2 rounded-lg text-xs text-center font-medium">
+                        🎉 Yetkazib berildi
+                    </div>
+                    {% elif order.status.value == 'cancelled' %}
+                    <div class="bg-gray-100 text-gray-500 border border-gray-200 p-2 rounded-lg text-xs text-center font-medium">
+                        ❌ Bekor qilingan
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-6">Hozircha buyurtma yo'q</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- MAHSULOT QO'SHISH -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
+            <form action="/partner/products/create" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                <input type="text" name="name" placeholder="Nomi" class="p-2 border rounded-lg text-sm md:col-span-2" required>
+                <input type="number" name="price" placeholder="Narxi" class="p-2 border rounded-lg text-sm" required>
+                <button type="submit" class="bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition">+ Qo'shish</button>
+                <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-4">
+            </form>
+        </div>
+
+        <!-- MAHSULOTLAR RO'YXATI -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-4 text-indigo-700">📋 Menyu</h2>
+            <div class="space-y-4">
+                {% for product in products %}
+                <div class="border-b pb-3 space-y-2">
+                    <!-- Tahrirlash Formasi -->
+                    <form action="/partner/products/{{ product.id }}/update" method="POST" class="flex flex-wrap md:flex-nowrap gap-2 items-center">
+                        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                        <input type="text" name="name" value="{{ product.name }}" class="flex-1 p-1.5 border rounded text-sm" required>
+                        <input type="number" name="price" value="{{ product.price }}" class="w-24 p-1.5 border rounded text-sm" required>
+                        <input type="text" name="description" value="{{ product.description or '' }}" class="flex-1 p-1.5 border rounded text-sm" placeholder="Tavsif">
+                        <button type="submit" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded font-semibold hover:bg-indigo-200 transition">Saqlash</button>
+                    </form>
+
+                    <!-- Holat va O'chirish -->
+                    <div class="flex justify-end gap-2">
+                        <form action="/partner/products/{{ product.id }}/toggle" method="POST">
+                            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                            <button type="submit" class="text-[10px] px-2 py-1 rounded font-bold {% if product.is_available %}bg-green-100 text-green-800 hover:bg-green-200{% else %}bg-red-100 text-red-800 hover:bg-red-200{% endif %} transition">
+                                {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
+                            </button>
+                        </form>
+                        <form action="/partner/products/{{ product.id }}/delete" method="POST" onsubmit="return confirm('Haqiqatan ham ushbu mahsulotni o\'chirmoqchimisiz?');">
+                            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                            <button type="submit" class="text-[10px] bg-red-50 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100 transition">🗑️ O'chirish</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-4">Hozircha mahsulot yo'q</p>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JAVASCRIPT: EVENT DELEGATION VA REAL-TIME MANTIQLARI -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Click voqealarini markaziy boshqarish
+            document.addEventListener('click', async function(e) {
+                const target = e.target;
+
+                // 1. Buyurtma statusini o'zgartirish
+                if (target.matches('[data-action="order-status"]')) {
+                    const orderId = target.getAttribute('data-order-id');
+                    const newStatus = target.getAttribute('data-status');
+                    await handleOrderStatus(orderId, newStatus);
+                }
+
+                // 2. Do'kon holatini (Ochiq/Yopiq) o'zgartirish
+                if (target.id === 'toggle-partner-btn') {
+                    await handleTogglePartner();
+                }
+            });
+
+            // Status o'zgartirish so'rovi (AJAX)
+            async function handleOrderStatus(orderId, newStatus) {
+                const formData = new FormData();
+                formData.append('new_status', newStatus);
+
+                try {
+                    const response = await fetch('/partner/orders/' + orderId + '/status', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Statusni o\'zgartirishda xatolik yuz berdi!');
+                    }
+                } catch (err) {
+                    alert('Tarmoq xatoligi!');
+                }
+            }
+
+            // Do'kon holatini o'zgartirish so'rovi (AJAX)
+            async function handleTogglePartner() {
+                try {
+                    const response = await fetch('/partner/status', {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Holatni o\'zgartirib bo\'lmadi.');
+                    }
+                } catch (err) {
+                    alert('Tarmoq xatoligi!');
+                }
+            }
+
+            // Auto-polling: Har 20 soniyada fonda tekshirib turish
+            setInterval(function() {
+                fetch(window.location.href, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function(res) {
+                    if (res.ok) {
+                        window.location.reload();
+                    }
+                }).catch(function(err) {
+                    console.log('Polling xatoligi');
+                });
+            }, 20000);
+        });
+    </script>
+</body>
+</html>
