@@ -68,6 +68,23 @@ async def get_current_partner_user(request: Request, db: AsyncSession = Depends(
     return user
 
 
+async def get_current_courier_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+    """Kuryer kabineti uchun — faqat COURIER rolidagi, faol foydalanuvchiga
+    ruxsat beradi."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise RedirectToLogin()
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+
+    if not user or not user.is_active or user.role != UserRole.COURIER:
+        request.session.clear()
+        raise RedirectToLogin()
+
+    return user
+
+
 def is_scoped_to_city(user: User) -> bool:
     """OWNER — cheklovsiz (True qaytarsa filtr YO'Q). Operator — faqat o'z shahri (city_id bo'yicha filtr)."""
     return user.role == UserRole.ADMIN and user.city_id is not None

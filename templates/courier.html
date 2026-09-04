@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuryer Kabineti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-indigo-700 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <div>
+            <h1 class="text-lg font-bold">🛵 {{ current_user.full_name }}</h1>
+            <p class="text-xs text-indigo-200">{{ current_user.phone_number }}</p>
+        </div>
+        <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
+    </header>
+
+    <div class="container mx-auto p-4 space-y-6 max-w-2xl">
+
+        <!-- BALANS -->
+        <div class="bg-white p-4 rounded-xl shadow-md">
+            <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-500">💰 Sizdagi qarz (egasiga topshirilishi kerak)</span>
+                <span class="text-xl font-bold {% if courier_profile and courier_profile.balance > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                    {{ "%.0f"|format(courier_profile.balance if courier_profile else 0) }} so'm
+                </span>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">
+                Bu — naqd pulda yig'gan, hali egasiga topshirmagan summangiz. Har yetkazgan buyurtmadan keyin bu raqam avtomatik oshadi; egasiga naqd pul topshirganingizda, u buni kamaytiradi.
+            </p>
+        </div>
+
+        {% if my_active_orders %}
+        <!-- HOZIR YETKAZAYOTGAN BUYURTMA -->
+        <div class="bg-white p-6 rounded-xl shadow-md border-2 border-indigo-500">
+            <h2 class="text-lg font-bold mb-3 text-indigo-700">🚴 Sizda hozir yo'lda</h2>
+            {% for order in my_active_orders %}
+            <div class="border rounded-lg p-3 mb-2">
+                <p class="font-bold text-sm">#{{ order.id }} — {{ order.partner.brand_name if order.partner else '—' }}</p>
+                <p class="text-xs text-gray-500 mb-2">📍 {{ order.delivery_address }}</p>
+                <ul class="text-xs space-y-0.5 mb-2">
+                    {% for item in order.items %}
+                    <li>• {{ item.product_name }} — {{ item.quantity }} ta</li>
+                    {% endfor %}
+                </ul>
+                <p class="text-sm font-bold mb-2">Yig'ib olish kerak: {{ "%.0f"|format(order.total_price + order.delivery_fee) }} so'm (naqd)</p>
+                <form action="/courier/orders/{{ order.id }}/delivered" method="POST">
+                    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-bold">✅ Yetkazdim</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- BO'SH BUYURTMALAR -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-3 text-indigo-700">📦 Yangi Buyurtmalar</h2>
+            <div class="space-y-2">
+                {% for order in available_orders %}
+                <div class="border rounded-lg p-3">
+                    <p class="font-bold text-sm">#{{ order.id }} — {{ order.partner.brand_name if order.partner else '—' }}</p>
+                    <p class="text-xs text-gray-500 mb-1">📍 {{ order.delivery_address }}</p>
+                    <p class="text-xs text-green-700 font-semibold mb-2">Yetkazish haqingiz: taxminan {{ "%.0f"|format(order.delivery_fee * 0.8) }} so'm</p>
+                    <form action="/courier/orders/{{ order.id }}/accept" method="POST">
+                        <button type="submit" class="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-bold">🛵 Qabul qilaman</button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-6">Hozircha bo'sh buyurtma yo'q</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- TARIX -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-3 text-indigo-700">📜 Yetkazilgan Buyurtmalar</h2>
+            <div class="space-y-1 max-h-64 overflow-y-auto">
+                {% for order in history_orders %}
+                <div class="flex justify-between text-xs border-b py-1.5">
+                    <span>#{{ order.id }} — {{ order.created_at.strftime('%d.%m %H:%M') }}</span>
+                    <span class="font-semibold">{{ "%.0f"|format(order.delivery_fee) }} so'm</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-4">Hali tarix yo'q</p>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>
