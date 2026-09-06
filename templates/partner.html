@@ -25,18 +25,49 @@
 
     <div class="container mx-auto mt-6 p-4 space-y-6 max-w-3xl">
 
-        <!-- BALANS -->
-        <div class="bg-white p-4 rounded-xl shadow-md flex justify-between items-center">
-            <span class="text-sm text-gray-500">💰 Joriy balansingiz</span>
-            <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance) }} so'm</span>
+        <!-- BALANS VA DO'KON SOZLAMALARI -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-4 rounded-xl shadow-md flex justify-between items-center md:col-span-1">
+                <div>
+                    <p class="text-xs text-gray-500">💰 Joriy balansingiz</p>
+                    <p class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance) }} so'm</p>
+                </div>
+            </div>
+
+            <!-- DO'KON ISH VAQTI VA PARAMETRLARI -->
+            <div class="bg-white p-4 rounded-xl shadow-md md:col-span-2">
+                <h3 class="text-xs font-bold text-gray-500 uppercase mb-2">⚙️ Do'kon Ish Parametrlari</h3>
+                <form action="/partner/settings/update" method="POST" class="grid grid-cols-3 gap-2 text-xs">
+                    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                    <div>
+                        <label class="block text-gray-400 mb-1">Min. summa</label>
+                        <input type="number" name="min_order_amount" value="{{ partner.min_order_amount or 0 }}" class="w-full p-1.5 border rounded" placeholder="so'm">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-1">Vaqt (min)</label>
+                        <input type="number" name="delivery_time" value="{{ partner.delivery_time or 30 }}" class="w-full p-1.5 border rounded" placeholder="daqiqa">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-1">Ish vaqti</label>
+                        <input type="text" name="working_hours" value="{{ partner.working_hours or '09:00 - 22:00' }}" class="w-full p-1.5 border rounded" placeholder="09:00-22:00">
+                    </div>
+                    <div class="col-span-3 text-right mt-1">
+                        <button type="submit" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-indigo-700">Saqlash</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
-        <!-- BUYURTMALAR -->
+        <!-- BUYURTMALAR RO'YXATI -->
         <div class="bg-white p-6 rounded-xl shadow-md">
-            <h2 class="text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-indigo-700">📦 Buyurtmalar</h2>
+                <span id="order-count-badge" class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">{{ orders|length }} ta</span>
+            </div>
+            
             <div class="space-y-3" id="orders-container">
                 {% for order in orders %}
-                <div class="border rounded-lg p-3">
+                <div class="border rounded-lg p-3" id="order-card-{{ order.id }}">
                     <div class="flex justify-between items-start mb-2">
                         <div>
                             <span class="font-bold text-sm">#{{ order.id }}</span>
@@ -48,11 +79,17 @@
                     </div>
 
                     <!-- Mijoz Ma'lumotlari -->
-                    <div class="text-xs text-gray-600 mb-2 border-b pb-2">
-                        <p>👤 <b>Mijoz:</b> {{ order.user.full_name if order.user else 'Noma\'lum' }} ({{ order.user.phone if order.user else '-' }})</p>
+                    <div class="text-xs text-gray-600 mb-2 border-b pb-2 space-y-1">
+                        <p>👤 <b>Mijoz:</b> {{ order.user.full_name if order.user else 'Noma\'lum' }} (<a href="tel:{{ order.user.phone }}" class="text-indigo-600 underline">{{ order.user.phone if order.user else '-' }}</a>)</p>
                         <p>📍 <b>Manzil:</b> {{ order.delivery_address }}</p>
+                        
+                        <!-- Kuryer Ma'lumotlari (on_the_way yoki undan keyingi holatda) -->
+                        {% if order.courier %}
+                        <p class="text-indigo-700 bg-indigo-50 p-1 rounded">🛵 <b>Kuryer:</b> {{ order.courier.full_name }} (<a href="tel:{{ order.courier.phone }}" class="underline">{{ order.courier.phone }}</a>)</p>
+                        {% endif %}
+
                         {% if order.comment %}
-                        <p class="text-amber-700 bg-amber-50 p-1 rounded mt-1">💬 <b>Izoh:</b> {{ order.comment }}</p>
+                        <p class="text-amber-700 bg-amber-50 p-1 rounded">💬 <b>Izoh:</b> {{ order.comment }}</p>
                         {% endif %}
                     </div>
 
@@ -100,42 +137,82 @@
         <!-- MAHSULOT QO'SHISH -->
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
-            <form action="/partner/products/create" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <form action="/partner/products/create" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                
                 <input type="text" name="name" placeholder="Nomi" class="p-2 border rounded-lg text-sm md:col-span-2" required>
                 <input type="number" name="price" placeholder="Narxi (so'm)" class="p-2 border rounded-lg text-sm" required>
-                <button type="submit" class="bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition">+ Qo'shish</button>
                 
+                <select name="category_id" class="p-2 border rounded-lg text-sm bg-white" required>
+                    <option value="" disabled selected>Kategoriyani tanlang</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+
                 <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-2">
-                <input type="url" name="image_url" placeholder="Rasm URL havolasi (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-2">
+                <input type="url" name="image_url" placeholder="Rasm URL havolasi (ixtiyoriy)" class="p-2 border rounded-lg text-sm">
+                
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-0.5">Rasm faylini yuklash:</label>
+                    <input type="file" name="image_file" accept="image/*" class="text-xs text-gray-500 w-full">
+                </div>
+
+                <div class="md:col-span-4 text-right">
+                    <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition">+ Qo'shish</button>
+                </div>
             </form>
         </div>
 
-        <!-- MAHSULOTLAR RO'YXATI -->
+        <!-- MAHSULOTLAR RO'YXATI (MENYU) -->
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-lg font-bold mb-4 text-indigo-700">📋 Menyu</h2>
             <div class="space-y-4">
                 {% for product in products %}
-                <div class="border-b pb-3 space-y-2">
-                    <form action="/partner/products/{{ product.id }}/update" method="POST" class="flex flex-wrap md:flex-nowrap gap-2 items-center">
+                <div class="border-b pb-4 space-y-2">
+                    <form action="/partner/products/{{ product.id }}/update" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-6 gap-2 items-center">
                         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
-                        <input type="text" name="name" value="{{ product.name }}" class="flex-1 p-1.5 border rounded text-sm" required>
-                        <input type="number" name="price" value="{{ product.price }}" class="w-24 p-1.5 border rounded text-sm" required>
-                        <input type="text" name="description" value="{{ product.description or '' }}" class="flex-1 p-1.5 border rounded text-sm" placeholder="Tavsif">
-                        <button type="submit" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded font-semibold hover:bg-indigo-200 transition">Saqlash</button>
+                        
+                        <input type="text" name="name" value="{{ product.name }}" class="p-1.5 border rounded text-sm md:col-span-2" required>
+                        <input type="number" name="price" value="{{ product.price }}" class="p-1.5 border rounded text-sm" required>
+                        
+                        <select name="category_id" class="p-1.5 border rounded text-sm bg-white">
+                            {% for category in categories %}
+                            <option value="{{ category.id }}" {% if product.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <input type="text" name="description" value="{{ product.description or '' }}" class="p-1.5 border rounded text-sm md:col-span-2" placeholder="Tavsif">
+                        <input type="url" name="image_url" value="{{ product.image_url or '' }}" class="p-1.5 border rounded text-sm md:col-span-2" placeholder="Rasm URL">
+                        
+                        <div class="md:col-span-3">
+                            <input type="file" name="image_file" accept="image/*" class="text-xs text-gray-500 w-full">
+                        </div>
+
+                        <div class="md:col-span-1 text-right">
+                            <button type="submit" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded font-semibold hover:bg-indigo-200 transition">Saqlash</button>
+                        </div>
                     </form>
 
-                    <div class="flex justify-end gap-2">
-                        <form action="/partner/products/{{ product.id }}/toggle" method="POST">
-                            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
-                            <button type="submit" class="text-[10px] px-2 py-1 rounded font-bold {% if product.is_available %}bg-green-100 text-green-800 hover:bg-green-200{% else %}bg-red-100 text-red-800 hover:bg-red-200{% endif %} transition">
-                                {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
-                            </button>
-                        </form>
-                        <form action="/partner/products/{{ product.id }}/delete" method="POST" onsubmit="return confirm('Haqiqatan ham ushbu mahsulotni o\'chirmoqchimisiz?');">
-                            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
-                            <button type="submit" class="text-[10px] bg-red-50 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100 transition">🗑️ O'chirish</button>
-                        </form>
+                    <div class="flex justify-between items-center pt-1">
+                        {% if product.image_url %}
+                        <img src="{{ product.image_url }}" alt="Rasm" class="w-8 h-8 object-cover rounded">
+                        {% else %}
+                        <div></div>
+                        {% endif %}
+
+                        <div class="flex gap-2">
+                            <form action="/partner/products/{{ product.id }}/toggle" method="POST">
+                                {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                                <button type="submit" class="text-[10px] px-2 py-1 rounded font-bold {% if product.is_available %}bg-green-100 text-green-800 hover:bg-green-200{% else %}bg-red-100 text-red-800 hover:bg-red-200{% endif %} transition">
+                                    {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
+                                </button>
+                            </form>
+                            <form action="/partner/products/{{ product.id }}/delete" method="POST" onsubmit="return confirm('Haqiqatan ham ushbu mahsulotni o\'chirmoqchimisiz?');">
+                                {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                                <button type="submit" class="text-[10px] bg-red-50 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100 transition">🗑️ O'chirish</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
                 {% else %}
@@ -146,18 +223,89 @@
 
     </div>
 
-    <!-- JAVASCRIPT: REAL-TIME VA TG WEBAPP -->
+    <!-- JAVASCRIPT: REAL-TIME POLLING, AUDIO VA TG WEBAPP -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Telegram WebApp Initsializatsiyasi
+            let previousOrderCount = parseInt(document.querySelector('#order-count-badge')?.textContent) || 0;
+
+            // 1. Telegram WebApp Initsializatsiyasi
             if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.ready();
-                window.Telegram.WebApp.expand();
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                tg.expand();
+                
+                // Telegram mavzusiga moslash
+                if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
+                if (tg.setBackgroundColor) tg.setBackgroundColor('secondary_bg_color');
             }
 
             const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
 
-            // Click voqealari
+            // 2. Ovozli Bildirishnoma (Web Audio API)
+            function playNotificationSound() {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 ton
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5 ton
+
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.4);
+                } catch (e) {
+                    console.log('Audio ijro etilmadi:', e);
+                }
+            }
+
+            // 3. Real-time Polling (Miltillashsiz DOM Swap)
+            setInterval(async () => {
+                // Agar foydalanuvchi biror matn yozayotgan bo'lsa polling qilmaslik
+                if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+                    return;
+                }
+
+                try {
+                    const res = await fetch(window.location.href);
+                    if (res.ok) {
+                        const htmlText = await res.text();
+                        const parser = new DOMParser();
+                        const newDoc = parser.parseFromString(htmlText, 'text/html');
+
+                        const newOrdersContainer = newDoc.querySelector('#orders-container');
+                        const currentOrdersContainer = document.querySelector('#orders-container');
+                        
+                        const newCountBadge = newDoc.querySelector('#order-count-badge');
+                        const currentCountBadge = document.querySelector('#order-count-badge');
+
+                        if (newOrdersContainer && currentOrdersContainer) {
+                            currentOrdersContainer.innerHTML = newOrdersContainer.innerHTML;
+                        }
+
+                        if (newCountBadge && currentCountBadge) {
+                            currentCountBadge.innerHTML = newCountBadge.innerHTML;
+                            const newCount = parseInt(newCountBadge.textContent) || 0;
+                            
+                            // Yangi buyurtma kelganda ovoz chiqarish
+                            if (newCount > previousOrderCount) {
+                                playNotificationSound();
+                            }
+                            previousOrderCount = newCount;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Polling xatoligi:', err);
+                }
+            }, 15000); // Har 15 soniyada avto-tekshiruv
+
+            // 4. Click Voqealari va AJAX
             document.addEventListener('click', async function(e) {
                 const target = e.target;
 
