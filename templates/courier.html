@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ partner.brand_name }} — Hamkor Kabineti</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Telegram Mini App SDK -->
+    <!-- Telegram Mini App SDK (ixtiyoriy yuklanadi) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen pb-10">
@@ -100,14 +100,12 @@
         <!-- MAHSULOT QO'SHISH -->
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
-            <form action="/partner/products/create" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <form action="/partner/products/create" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-2">
                 {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
                 <input type="text" name="name" placeholder="Nomi" class="p-2 border rounded-lg text-sm md:col-span-2" required>
                 <input type="number" name="price" placeholder="Narxi (so'm)" class="p-2 border rounded-lg text-sm" required>
                 <button type="submit" class="bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition">+ Qo'shish</button>
-                
-                <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-2">
-                <input type="url" name="image_url" placeholder="Rasm URL havolasi (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-2">
+                <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-4">
             </form>
         </div>
 
@@ -146,13 +144,16 @@
 
     </div>
 
-    <!-- JAVASCRIPT: REAL-TIME VA TG WEBAPP -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Telegram WebApp Initsializatsiyasi
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.ready();
-                window.Telegram.WebApp.expand();
+            // Telegram WebApp faqat mavjud bo'lganda ishlaydi (Kompyuter brauzerida xatolik bermaydi)
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+                try {
+                    window.Telegram.WebApp.ready();
+                    window.Telegram.WebApp.expand();
+                } catch(e) {
+                    console.log('Telegram SDK yuklanishida xatolik (Brauzer muhiti)');
+                }
             }
 
             const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
