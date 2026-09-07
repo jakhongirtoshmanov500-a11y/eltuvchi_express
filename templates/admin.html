@@ -42,6 +42,7 @@
                 {% for city in all_cities %}
                 <a href="/admin?city_id={{ city.id }}" class="px-2 py-1 rounded {% if active_city_id == city.id %}bg-white text-indigo-700 font-bold{% endif %}">{{ city.name }}</a>
                 {% endfor %}
+                <button type="button" onclick="openAddCityModal()" class="px-2 py-1 rounded bg-green-500 hover:bg-green-600 font-bold text-white" title="Yangi shahar qo'shish">+</button>
             </div>
             {% endif %}
             <div class="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20">
@@ -216,6 +217,11 @@
                 </div>
 
                 <div>
+                    <label class="block text-xs font-medium">Mijoz izohi (ixtiyoriy)</label>
+                    <input type="text" name="client_comment" placeholder="Masalan: piyozsiz bo'lsin" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                </div>
+
+                <div>
                     <label class="block text-xs font-medium mb-1">Do'kon</label>
                     <select id="order-partner-select" name="partner_id" onchange="onPartnerChange()" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800" required>
                         <option value="">Do'konni tanlang</option>
@@ -300,7 +306,14 @@
                         </tr>
                         <tr id="order-details-{{ order.id }}" class="hidden bg-gray-50 dark:bg-gray-800/50">
                             <td colspan="6" class="p-3">
-                                <p class="text-xs font-semibold mb-1">Buyurtma tarkibi:</p>
+                                <p class="text-xs mb-1">👤 <b>Mijoz:</b> {{ order.client.full_name if order.client else '—' }} · <a href="tel:{{ order.client.phone_number if order.client else '' }}" class="underline text-indigo-600">{{ order.client.phone_number if order.client else '—' }}</a></p>
+                                {% if order.courier %}
+                                <p class="text-xs mb-1">🛵 <b>Kuryer:</b> {{ order.courier.full_name }} · <a href="tel:{{ order.courier.phone_number }}" class="underline text-indigo-600">{{ order.courier.phone_number }}</a></p>
+                                {% endif %}
+                                {% if order.client_comment %}
+                                <p class="text-xs mb-2 bg-amber-50 text-amber-700 rounded px-2 py-1 inline-block">💬 {{ order.client_comment }}</p>
+                                {% endif %}
+                                <p class="text-xs font-semibold mb-1 mt-1">Buyurtma tarkibi:</p>
                                 {% if order.items %}
                                 <ul class="text-xs space-y-0.5">
                                     {% for item in order.items %}
@@ -338,7 +351,7 @@
                     </div>
                     <div>
                         <label class="block text-xs font-medium">Parol (kabinetga kirish uchun)</label>
-                        <input type="text" name="password" placeholder="Parol" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                        <input type="text" name="password" placeholder="4 xonali PIN" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
                     </div>
                     <div>
                         <label class="block text-xs font-medium">Transport turi</label>
@@ -693,11 +706,16 @@
                             </div>
                         </div>
                     </div>
+                    <div>
+                        <label class="block text-xs font-medium">Minimal buyurtma summasi (so'm)</label>
+                        <input type="number" name="min_order_amount" value="0" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                        <p class="text-[11px] text-gray-500 mt-1">0 = cheklov yo'q</p>
+                    </div>
                     <div class="border-t pt-3 mt-1 dark:border-gray-700">
                         <p class="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300">🔑 Hamkor kabineti (ixtiyoriy)</p>
                         <p class="text-[11px] text-gray-500 mb-2">Kiritsangiz, do'kon egasi shu telefon+parol bilan o'z kabinetiga kirib, menyusini va buyurtmalarini o'zi boshqara oladi. Bo'sh qoldirsangiz, do'konni faqat siz boshqarasiz.</p>
                         <input type="text" name="login_phone" placeholder="Kirish uchun telefon (+998...)" class="w-full mb-2 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                        <input type="text" name="login_password" placeholder="Parol" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800">
+                        <input type="text" name="login_password" placeholder="4 xonali PIN" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" class="w-full p-2 border rounded-lg text-sm dark:bg-gray-800">
                     </div>
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
                 </form>
@@ -708,7 +726,7 @@
             <!-- Mahsulot Qo'shish Formasi (faqat OWNER) -->
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
-                <form action="/admin/products/create" method="POST" class="space-y-3">
+                <form action="/admin/products/create" method="POST" enctype="multipart/form-data" class="space-y-3">
                     <div>
                         <label class="block text-xs font-medium">Tegishli Do'kon</label>
                         <select name="partner_id" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
@@ -725,6 +743,23 @@
                     <div>
                         <label class="block text-xs font-medium">Narxi (so'm)</label>
                         <input type="number" name="price" placeholder="35000" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Kategoriya</label>
+                        <input type="text" name="category" list="category-suggestions" placeholder="Masalan: Fastfood" value="Boshqa" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                        <datalist id="category-suggestions">
+                            <option value="Ichimliklar">
+                            <option value="Fastfood">
+                            <option value="Pitsalar">
+                            <option value="Shashliklar">
+                            <option value="Salatlar">
+                            <option value="Shirinliklar">
+                            <option value="Boshqa">
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Rasm (ixtiyoriy)</label>
+                        <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="w-full mt-1 p-1.5 border rounded-lg text-xs dark:bg-gray-800">
                     </div>
                     <div>
                         <label class="block text-xs font-medium">Tavsifi</label>
@@ -754,6 +789,7 @@
                                         data-open="{{ partner.opening_time }}"
                                         data-close="{{ partner.closing_time }}"
                                         data-city-id="{{ partner.city_id or '' }}"
+                                        data-min-order="{{ partner.min_order_amount or 0 }}"
                                         onclick="openEditPartnerModal(this)" 
                                         class="text-blue-600 text-xs font-bold px-1">✏️</button>
                                 {% endif %}
@@ -769,9 +805,7 @@
                                 {% if partner.user_id %}
                                 <span class="text-[10px] text-green-600 font-semibold" title="Hamkor kabinetiga kira oladi">🔑✅</span>
                                 {% else %}
-                                <button type="button" data-partner-id="{{ partner.id }}" onclick="openSetLoginModal(this.getAttribute('data-partner-id'))" class="text-[10px] text-indigo-600 font-semibold underline">
-  🔑 Kirish berish
-</button>
+                                <button type="button" data-id="{{ partner.id }}" onclick="openSetLoginModal(this)" class="text-[10px] text-indigo-600 font-semibold underline">🔑 Kirish berish</button>
                                 {% endif %}
                                 {% endif %}
                             </div>
@@ -782,9 +816,14 @@
                             {% for product in products %}
                                 {% if product.partner_id == partner.id %}
                                 <div class="py-1.5 flex justify-between items-center text-xs">
-                                    <div>
-                                        <p class="font-medium">{{ product.name }}</p>
-                                        <p class="text-green-600 font-bold">{{ product.price }} so'm</p>
+                                    <div class="flex items-center gap-2">
+                                        {% if product.image_url %}
+                                        <img src="{{ product.image_url }}" class="w-8 h-8 rounded object-cover" alt="">
+                                        {% endif %}
+                                        <div>
+                                            <p class="font-medium">{{ product.name }} <span class="text-gray-400 font-normal">· {{ product.category or 'Boshqa' }}</span></p>
+                                            <p class="text-green-600 font-bold">{{ product.price }} so'm</p>
+                                        </div>
                                     </div>
                                     <div class="flex items-center gap-1">
                                         {% if is_owner %}
@@ -793,6 +832,8 @@
                                                 data-name="{{ product.name }}"
                                                 data-price="{{ product.price }}"
                                                 data-desc="{{ product.description or '' }}"
+                                                data-category="{{ product.category or 'Boshqa' }}"
+                                                data-image="{{ product.image_url or '' }}"
                                                 onclick="openEditProductModal(this)" 
                                                 class="text-blue-600 font-bold px-1 text-xs">✏️</button>
                                         {% endif %}
@@ -935,13 +976,40 @@
     </div>
 
     <!-- TAHRIRLASH MODALLARI -->
+    <div id="add-city-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-sm w-full">
+            <h3 class="font-bold text-lg mb-4 dark:text-white">🏙️ Shaharlarni Boshqarish</h3>
+
+            <form action="/admin/cities/create" method="POST" class="flex gap-2 mb-4">
+                <input type="text" name="name" placeholder="Yangi shahar nomi" class="flex-1 p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded text-sm font-bold">+ Qo'shish</button>
+            </form>
+
+            <p class="text-xs font-semibold mb-2 dark:text-gray-300">Mavjud shaharlar:</p>
+            <div class="space-y-1 max-h-52 overflow-y-auto mb-4">
+                {% for city in all_cities %}
+                <div class="flex justify-between items-center p-2 border rounded dark:border-gray-700">
+                    <span class="text-sm dark:text-white">{{ city.name }}</span>
+                    <form action="/admin/cities/{{ city.id }}/delete" method="POST" onsubmit="return confirm('{{ city.name }} shahrini o\'chirmoqchimisiz? Bu shaharda hech qanday do\'kon/foydalanuvchi qolmagan bo\'lishi kerak.');">
+                        <button type="submit" class="text-red-600 text-xs font-bold">🗑️ O'chirish</button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-400">Hozircha shahar yo'q</p>
+                {% endfor %}
+            </div>
+
+            <button type="button" onclick="closeModals()" class="w-full px-4 py-2 bg-gray-300 rounded text-sm">Yopish</button>
+        </div>
+    </div>
+
     <div id="set-login-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-sm w-full">
             <h3 class="font-bold text-lg mb-2 dark:text-white">🔑 Hamkor kabinetiga kirish yaratish</h3>
             <p class="text-xs text-gray-500 mb-4">Do'kon egasiga shu telefon+parol beriladi — u shu bilan o'z kabinetiga kirib, menyu va buyurtmalarini boshqaradi.</p>
             <form id="set-login-form" method="POST" class="space-y-3">
                 <input type="text" name="login_phone" placeholder="Telefon (+998...)" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
-                <input type="text" name="login_password" placeholder="Parol" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <input type="text" name="login_password" placeholder="4 xonali PIN" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
                     <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold">Yaratish</button>
@@ -967,6 +1035,10 @@
                     <input type="text" id="edit-partner-open" name="opening_time" class="w-1/2 p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                     <input type="text" id="edit-partner-close" name="closing_time" class="w-1/2 p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 </div>
+                <div>
+                    <label class="block text-xs font-medium dark:text-gray-300">Minimal buyurtma summasi (so'm)</label>
+                    <input type="number" id="edit-partner-min-order" name="min_order_amount" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                </div>
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">Saqlash</button>
@@ -978,9 +1050,15 @@
     <div id="edit-product-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-md w-full">
             <h3 class="font-bold text-lg mb-4 dark:text-white">Mahsulotni Tahrirlash</h3>
-            <form id="edit-product-form" method="POST" class="space-y-3">
+            <form id="edit-product-form" method="POST" enctype="multipart/form-data" class="space-y-3">
                 <input type="text" id="edit-product-name" name="name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
                 <input type="number" id="edit-product-price" name="price" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" required>
+                <input type="text" id="edit-product-category" name="category" list="category-suggestions" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                <div>
+                    <img id="edit-product-current-image" src="" alt="" class="h-16 w-16 object-cover rounded-lg mb-1 hidden">
+                    <label class="block text-xs font-medium dark:text-gray-300">Yangi rasm (o'zgartirmoqchi bo'lsangiz)</label>
+                    <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="w-full p-1.5 border rounded text-xs dark:bg-gray-700 dark:text-white">
+                </div>
                 <input type="text" id="edit-product-desc" name="description" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
@@ -1009,7 +1087,7 @@
                     {% endfor %}
                 </select>
                 {% endif %}
-                <input type="text" name="new_password" placeholder="Yangi parol (faqat o'zgartirmoqchi bo'lsangiz)" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                <input type="text" name="new_password" placeholder="Yangi 4 xonali PIN (faqat o'zgartirmoqchi bo'lsangiz)" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="closeModals()" class="px-4 py-2 bg-gray-300 rounded text-sm">Bekor qilish</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">Saqlash</button>
@@ -1105,6 +1183,7 @@
             const open = btn.dataset.open;
             const close = btn.dataset.close;
             const cityId = btn.dataset.cityId;
+            const minOrder = btn.dataset.minOrder;
 
             document.getElementById('edit-partner-form').action = `/admin/partners/${id}/update`;
             document.getElementById('edit-partner-name').value = name;
@@ -1114,6 +1193,7 @@
             document.getElementById('edit-partner-commission').value = commission;
             document.getElementById('edit-partner-open').value = open;
             document.getElementById('edit-partner-close').value = close;
+            document.getElementById('edit-partner-min-order').value = minOrder || 0;
             document.getElementById('edit-partner-modal').classList.remove('hidden');
         }
 
@@ -1122,11 +1202,23 @@
             const name = btn.dataset.name;
             const price = btn.dataset.price;
             const desc = btn.dataset.desc;
+            const category = btn.dataset.category;
+            const image = btn.dataset.image;
 
             document.getElementById('edit-product-form').action = `/admin/products/${id}/update`;
             document.getElementById('edit-product-name').value = name;
             document.getElementById('edit-product-price').value = price;
             document.getElementById('edit-product-desc').value = desc;
+            document.getElementById('edit-product-category').value = category;
+
+            const imgEl = document.getElementById('edit-product-current-image');
+            if (image) {
+                imgEl.src = image;
+                imgEl.classList.remove('hidden');
+            } else {
+                imgEl.classList.add('hidden');
+            }
+
             document.getElementById('edit-product-modal').classList.remove('hidden');
         }
 
@@ -1152,6 +1244,11 @@
             document.getElementById('edit-product-modal').classList.add('hidden');
             document.getElementById('edit-courier-modal').classList.add('hidden');
             document.getElementById('set-login-modal').classList.add('hidden');
+            document.getElementById('add-city-modal').classList.add('hidden');
+        }
+
+        function openAddCityModal() {
+            document.getElementById('add-city-modal').classList.remove('hidden');
         }
 
         function openSetLoginModal(partnerId) {

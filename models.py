@@ -94,12 +94,12 @@ class PartnerProfile(Base):
     opening_time = Column(String, default="09:00")
     closing_time = Column(String, default="23:00")
 
+    # Minimal buyurtma summasi — bundan kam summaga buyurtma qabul qilinmaydi
+    min_order_amount = Column(Float, default=0.0)
+
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
-    
-    # QO'SHILDI: Hamkor buyurtmalari ro'yxatiga bog'lanish
-    orders = relationship("Order", back_populates="partner")
 
 class Product(Base):
     __tablename__ = "products"
@@ -110,6 +110,11 @@ class Product(Base):
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
     is_available = Column(Boolean, default=True)
+
+    # Rasm va kategoriya — mijoz ilovasida menyu chiroyli va tartibli
+    # ko'rinishi uchun (masalan "Ichimliklar", "Pitsalar")
+    image_url = Column(String, nullable=True)
+    category = Column(String, nullable=True, default="Boshqa")
 
     partner = relationship("PartnerProfile", back_populates="products")
 
@@ -126,15 +131,18 @@ class Order(Base):
     delivery_fee = Column(Float, nullable=False)
     delivery_address = Column(String, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Mijozning maxsus istaklari ("Piyozsiz", "Achchiq bo'lmasin" va h.k.)
+    client_comment = Column(Text, nullable=True)
 
-    # QO'SHILDI: main.py dagi compute_period_stats va boshqa statistikalar uchun zarur bog'lanishlar
-    client = relationship("User", foreign_keys=[client_id])
-    courier = relationship("User", foreign_keys=[courier_id])
-    partner = relationship("PartnerProfile", back_populates="orders")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    # Mijoz va kuryerning ismi/telefonini qulay ko'rsatish uchun (admin/hamkor
+    # panellarida "kimga qo'ng'iroq qilish kerak" degan savolga javob beradi)
+    client = relationship("User", foreign_keys=[client_id])
+    courier = relationship("User", foreign_keys=[courier_id])
 
 
 class OrderItem(Base):

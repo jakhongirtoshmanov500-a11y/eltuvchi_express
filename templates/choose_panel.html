@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panelni tanlang</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.ready(); tg.expand(); }
+    </script>
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+        <h1 class="text-lg font-bold text-center mb-1">Qaysi panelga kirasiz?</h1>
+        <p class="text-xs text-gray-500 text-center mb-6">Sizda bir nechta rol mavjud</p>
+        <div class="space-y-3">
+            {% for panel in panels %}
+            <a href="{{ panel.url }}" class="block w-full text-center bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold">
+                {{ panel.label }}
+            </a>
+            {% endfor %}
+        </div>
+        <a href="/logout" class="block text-center text-xs text-gray-400 underline mt-6">Chiqish</a>
+    </div>
+</body>
+</html>

@@ -1,10 +1,11 @@
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
 
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter, UploadFile, File
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -177,6 +178,9 @@ clients_router = APIRouter(
 operators_router = APIRouter(
     prefix="/admin/operators", tags=["Operatorlar Boshqaruvi"], dependencies=[Depends(require_owner)]
 )
+cities_router = APIRouter(
+    prefix="/admin/cities", tags=["Shaharlar Boshqaruvi"], dependencies=[Depends(require_owner)]
+)
 finance_router = APIRouter(
     prefix="/admin/finance", tags=["Moliyaviy Boshqaruv"], dependencies=[Depends(require_owner)]
 )
@@ -195,11 +199,14 @@ async def login_submit(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    # DIQQAT: endi rol bo'yicha emas — telefon raqami va parol/PIN mos
+    # kelsa, kirish beriladi. Qaysi panel(lar)ga kira olishi keyin
+    # PROFIL MAVJUDLIGI (courier_profile / partner_profile) orqali
+    # aniqlanadi — bitta odam bir nechtasiga ega bo'lishi mumkin.
     result = await db.execute(
-        select(User).where(
-            User.phone_number == phone_number,
-            User.role.in_([UserRole.OWNER, UserRole.ADMIN, UserRole.PARTNER, UserRole.COURIER]),
-        )
+        select(User)
+        .where(User.phone_number == phone_number)
+        .options(selectinload(User.courier_profile), selectinload(User.partner_profile))
     )
     user = result.scalars().first()
 
@@ -207,17 +214,60 @@ async def login_submit(
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"error": "Telefon raqami yoki parol noto'g'ri"},
+            context={"error": "Telefon raqami yoki parol/PIN noto'g'ri"},
         )
 
     request.session["user_id"] = user.id
 
-    # Rolga qarab turli panelga yo'naltiramiz
-    if user.role == UserRole.PARTNER:
+    # Qaysi panellarga kira olishini aniqlaymiz
+    can_admin = user.role in (UserRole.OWNER, UserRole.ADMIN)
+    can_partner = user.partner_profile is not None
+    can_courier = user.courier_profile is not None
+    available = [can_admin, can_partner, can_courier].count(True)
+
+    if available > 1:
+        # Bir nechta panelga kira oladi — tanlov sahifasini ko'rsatamiz
+        return RedirectResponse(url="/choose-panel", status_code=status.HTTP_303_SEE_OTHER)
+    if can_admin:
+        return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+    if can_partner:
         return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
-    if user.role == UserRole.COURIER:
+    if can_courier:
         return RedirectResponse(url="/courier", status_code=status.HTTP_303_SEE_OTHER)
-    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Hech qanday panelga ruxsati yo'q (masalan oddiy CLIENT parol bilan
+    # kirishga urinsa — clientlar odatda parolga ega bo'lmaydi, lekin
+    # ehtiyot chorasi sifamida)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"error": "Sizga tegishli boshqaruv paneli topilmadi"},
+    )
+
+
+@app.get("/choose-panel", response_class=HTMLResponse)
+async def choose_panel(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(selectinload(User.courier_profile), selectinload(User.partner_profile))
+    )
+    user = result.scalars().first()
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    panels = []
+    if user.role in (UserRole.OWNER, UserRole.ADMIN):
+        panels.append({"url": "/admin", "label": "🛠 Boshqaruv Paneli"})
+    if user.partner_profile:
+        panels.append({"url": "/partner", "label": "🏪 Hamkor Kabineti"})
+    if user.courier_profile:
+        panels.append({"url": "/courier", "label": "🛵 Kuryer Kabineti"})
+
+    return templates.TemplateResponse(request=request, name="choose_panel.html", context={"panels": panels})
 
 
 @app.get("/logout")
@@ -326,7 +376,11 @@ async def admin_dashboard(
     today_revenue = f"{today_revenue_val:,.0f}".replace(",", " ")
 
     # ---- BUYURTMALAR (tarkibi bilan, shahar bo'yicha filtrlangan) ----
-    orders_stmt = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+    orders_stmt = (
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.client), selectinload(Order.courier))
+        .order_by(Order.created_at.desc())
+    )
     if active_city_id is not None:
         orders_stmt = orders_stmt.join(PartnerProfile, Order.partner_id == PartnerProfile.id).where(
             PartnerProfile.city_id == active_city_id
@@ -525,6 +579,93 @@ async def update_settings(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# Faqat shu formatlarga ruxsat — boshqa fayl turlari (masalan .exe, .php)
+# serverga yuklanmasligi uchun. Hajm ham cheklanadi, aks holda kimdir
+# juda katta fayl yuklab, diskni to'ldirib qo'yishi mumkin edi.
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+async def save_uploaded_image(file: UploadFile, subfolder: str) -> str:
+    """Yuklangan rasmni tekshirib, xavfsiz nom bilan saqlaydi, va uni
+    brauzerdan ochish mumkin bo'lgan URL qilib qaytaradi.
+
+    Xavfsizlik choralari:
+    - Fayl kengaytmasi ro'yxatdagilardan biri bo'lishi shart
+    - Hajmi 5 MB dan oshmasligi kerak
+    - Fayl nomi FOYDALANUVCHI kiritganidan emas, tasodifiy (uuid) qilib
+      yaratiladi — aks holda kimdir ataylab xavfli nom (masalan
+      "../../main.py") yuborib, serverdagi boshqa faylni ustidan
+      yozib yuborishi mumkin edi (path traversal hujumi).
+    """
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Faqat JPG, PNG yoki WEBP formatidagi rasmlarga ruxsat berilgan")
+
+    contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Bo'sh fayl yuklandi")
+    if len(contents) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Rasm hajmi 5 MB dan oshmasligi kerak")
+
+    upload_dir = os.path.join("static", "uploads", subfolder)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    safe_filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(upload_dir, safe_filename)
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    return f"/static/uploads/{subfolder}/{safe_filename}"
+
+
+def validate_pin(pin: str) -> None:
+    """4 xonali PIN — telefonda kiritish qulay bo'lishi uchun ataylab
+    qisqa. Xavfsizlik: PIN bcrypt bilan xeshlanadi (auth.py)."""
+    if not (pin.isdigit() and len(pin) == 4):
+        raise HTTPException(status_code=400, detail="PIN aynan 4 ta raqamdan iborat bo'lishi kerak")
+
+
+async def find_or_create_login_user(
+    db: AsyncSession,
+    phone_number: str,
+    password: str,
+    full_name: str,
+    city_id: Optional[int] = None,
+) -> User:
+    """Telefon raqami bo'yicha foydalanuvchini topadi (multi-role: agar
+    u allaqachon mijoz/kuryer/hamkor bo'lsa, O'SHA akkauntga profil
+    qo'shiladi — yangi dublikat yaratilmaydi). Agar bu telefon OWNER yoki
+    operator (ADMIN) ga tegishli bo'lsa — xavfsizlik uchun rad etamiz."""
+    validate_pin(password)
+
+    result = await db.execute(select(User).where(User.phone_number == phone_number))
+    user = result.scalars().first()
+
+    if user:
+        if user.role in (UserRole.OWNER, UserRole.ADMIN):
+            raise HTTPException(
+                status_code=400,
+                detail="Bu telefon raqami admin/operator akkauntiga tegishli — uni kuryer/hamkor qilib bo'lmaydi",
+            )
+        user.password_hash = hash_password(password)
+        if city_id is not None and user.city_id is None:
+            user.city_id = city_id
+        return user
+
+    new_user = User(
+        full_name=full_name,
+        phone_number=phone_number,
+        password_hash=hash_password(password),
+        role=UserRole.CLIENT,  # multi-role tizimida bu shunchaki "boshlang'ich" belgi
+        city_id=city_id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.flush()
+    return new_user
+
+
 async def _get_or_create_setting(db: AsyncSession) -> SystemSetting:
     result = await db.execute(select(SystemSetting))
     setting = result.scalars().first()
@@ -637,6 +778,7 @@ async def create_order(
     client_name: str = Form(...),
     client_phone: str = Form(...),
     delivery_address: str = Form(...),
+    client_comment: Optional[str] = Form(None),
     product_ids: List[int] = Form(...),
     quantities: List[int] = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -688,6 +830,12 @@ async def create_order(
     if not order_items_data:
         raise HTTPException(status_code=400, detail="Kamida bitta mahsulot tanlanishi kerak")
 
+    if partner_for_city.min_order_amount and total_price < partner_for_city.min_order_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bu do'konda minimal buyurtma summasi {partner_for_city.min_order_amount:.0f} so'm",
+        )
+
     setting_query = await db.execute(select(SystemSetting))
     setting = setting_query.scalars().first()
     delivery_fee = setting.base_delivery_fee * setting.weather_multiplier if setting else 10000.0
@@ -699,6 +847,7 @@ async def create_order(
         total_price=total_price,
         delivery_fee=delivery_fee,
         delivery_address=delivery_address,
+        client_comment=client_comment,
     )
     db.add(new_order)
     await db.flush()
@@ -801,6 +950,7 @@ async def create_partner(
     commission_rate: float = Form(10.0),
     opening_time: str = Form("09:00"),
     closing_time: str = Form("23:00"),
+    min_order_amount: float = Form(0.0),
     login_phone: Optional[str] = Form(None),
     login_password: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -814,6 +964,7 @@ async def create_partner(
         commission_rate=commission_rate,
         opening_time=opening_time,
         closing_time=closing_time,
+        min_order_amount=min_order_amount,
         is_open=True,
         balance=0.0,
     )
@@ -825,18 +976,7 @@ async def create_partner(
     # do'konga bog'laymiz. Kiritilmasa — do'konni faqat siz boshqarasiz,
     # bu ham to'liq to'g'ri variant.
     if login_phone and login_password:
-        existing = await db.execute(select(User).where(User.phone_number == login_phone))
-        if existing.scalars().first():
-            raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon band")
-        partner_user = User(
-            full_name=brand_name,
-            phone_number=login_phone,
-            role=UserRole.PARTNER,
-            password_hash=hash_password(login_password),
-            is_active=True,
-        )
-        db.add(partner_user)
-        await db.flush()
+        partner_user = await find_or_create_login_user(db, login_phone, login_password, brand_name, city_id)
         new_partner.user_id = partner_user.id
 
     await db.commit()
@@ -853,6 +993,7 @@ async def update_partner(
     commission_rate: float = Form(...),
     opening_time: str = Form(...),
     closing_time: str = Form(...),
+    min_order_amount: float = Form(0.0),
     db: AsyncSession = Depends(get_db),
     owner: User = Depends(require_owner),
 ):
@@ -869,6 +1010,7 @@ async def update_partner(
     partner.commission_rate = commission_rate
     partner.opening_time = opening_time
     partner.closing_time = closing_time
+    partner.min_order_amount = min_order_amount
 
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
@@ -905,22 +1047,12 @@ async def set_partner_login(
 
     if partner.user_id:
         # Allaqachon akkaunti bor — parol/telefonni yangilaymiz
+        validate_pin(login_password)
         partner.user.phone_number = login_phone
         partner.user.password_hash = hash_password(login_password)
         partner.user.is_active = True
     else:
-        existing = await db.execute(select(User).where(User.phone_number == login_phone))
-        if existing.scalars().first():
-            raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon band")
-        partner_user = User(
-            full_name=partner.brand_name,
-            phone_number=login_phone,
-            role=UserRole.PARTNER,
-            password_hash=hash_password(login_password),
-            is_active=True,
-        )
-        db.add(partner_user)
-        await db.flush()
+        partner_user = await find_or_create_login_user(db, login_phone, login_password, partner.brand_name)
         partner.user_id = partner_user.id
 
     await db.commit()
@@ -950,6 +1082,8 @@ async def create_product(
     name: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
+    category: str = Form("Boshqa"),
+    image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     owner: User = Depends(require_owner),
 ):
@@ -957,11 +1091,17 @@ async def create_product(
     if not partner_query.scalars().first():
         raise HTTPException(status_code=404, detail="Bunday do'kon topilmadi")
 
+    image_url = None
+    if image and image.filename:
+        image_url = await save_uploaded_image(image, "products")
+
     new_product = Product(
         partner_id=partner_id,
         name=name,
         price=price,
         description=description,
+        category=category,
+        image_url=image_url,
         is_available=True,
     )
     db.add(new_product)
@@ -975,6 +1115,8 @@ async def update_product(
     name: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
+    category: str = Form("Boshqa"),
+    image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     owner: User = Depends(require_owner),
 ):
@@ -987,6 +1129,13 @@ async def update_product(
     product.name = name
     product.price = price
     product.description = description
+    product.category = category
+
+    # Rasm faqat YANGI fayl tanlangandagina almashtiriladi — bo'sh
+    # qoldirsa, eski rasm o'zgarmasdan qoladi (har safar qayta yuklashga
+    # majburlamaslik uchun).
+    if image and image.filename:
+        product.image_url = await save_uploaded_image(image, "products")
 
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
@@ -1029,23 +1178,14 @@ async def create_courier(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    existing_query = await db.execute(select(User).where(User.phone_number == phone_number))
-    if existing_query.scalars().first():
-        raise HTTPException(status_code=400, detail="Bu telefon raqami allaqachon ro'yxatdan o'tgan")
-
     # Operator faqat o'z shahriga kuryer qo'sha oladi — city_id majburan o'ziniki bo'ladi
     resolved_city_id = city_id if current_user.role == UserRole.OWNER else current_user.city_id
 
-    new_user = User(
-        full_name=full_name,
-        phone_number=phone_number,
-        password_hash=hash_password(password),  # kuryer shu bilan /courier kabinetiga kiradi
-        role=UserRole.COURIER,
-        city_id=resolved_city_id,
-        is_active=True,
-    )
-    db.add(new_user)
-    await db.flush()
+    new_user = await find_or_create_login_user(db, phone_number, password, full_name, resolved_city_id)
+
+    existing_profile = await db.execute(select(CourierProfile).where(CourierProfile.user_id == new_user.id))
+    if existing_profile.scalars().first():
+        raise HTTPException(status_code=400, detail="Bu foydalanuvchi allaqachon kuryer sifatida ro'yxatdan o'tgan")
 
     new_courier_profile = CourierProfile(
         user_id=new_user.id,
@@ -1093,6 +1233,7 @@ async def update_courier(
         courier_user.courier_profile.transport_type = transport_type
 
     if new_password:
+        validate_pin(new_password)
         courier_user.password_hash = hash_password(new_password)
 
     # Faqat OWNER kuryerni boshqa shaharga o'tkaza oladi
@@ -1329,6 +1470,56 @@ async def reset_system(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ==================== 8b. SHAHARLAR BOSHQARUVI (faqat OWNER) ====================
+@cities_router.post("/create")
+async def create_city(name: str = Form(...), db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(City).where(City.name == name))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Bunday shahar allaqachon mavjud")
+
+    # DIQQAT: qo'shimcha ish qilishning hojati yo'q — shahar qo'shilgan
+    # zahoti, tizimdagi barcha filtrlar (do'kon/kuryer/mijoz/buyurtma/
+    # operator) allaqachon city_id orqali ishlaydi, ya'ni yangi shahar
+    # avtomatik ravishda "to'liq ishlaydigan" bo'lim bo'ladi — operator
+    # shu shaharga biriktirilsa, faqat shu shaharni ko'radi, boshqa
+    # hech narsa alohida sozlashning hojati yo'q.
+    db.add(City(name=name))
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@cities_router.post("/{city_id}/delete")
+async def delete_city(city_id: int, db: AsyncSession = Depends(get_db)):
+    city_result = await db.execute(select(City).where(City.id == city_id))
+    city = city_result.scalars().first()
+    if not city:
+        raise HTTPException(status_code=404, detail="Shahar topilmadi")
+
+    # Xavfsizlik: agar bu shaharda hali ham do'kon, kuryer yoki operator
+    # bo'lsa — o'chirishga ruxsat bermaymiz, aks holda ular "osilib qolgan"
+    # (shahri yo'q) holatga tushib qolardi.
+    partner_count = (await db.execute(
+        select(func.count(PartnerProfile.id)).where(PartnerProfile.city_id == city_id)
+    )).scalar()
+    people_count = (await db.execute(
+        select(func.count(User.id)).where(User.city_id == city_id)
+    )).scalar()
+
+    if partner_count or people_count:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Bu shaharda hali {partner_count} ta do'kon va {people_count} ta "
+                f"foydalanuvchi (kuryer/operator/mijoz) bor — avval ularni boshqa "
+                f"shaharga o'tkazing yoki o'chiring, keyin shaharni o'chiring."
+            ),
+        )
+
+    await db.delete(city)
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # Barcha routerlarni ilovaga ulash
 app.include_router(admin_router)
 app.include_router(settings_router)
@@ -1338,6 +1529,7 @@ app.include_router(products_router)
 app.include_router(couriers_router)
 app.include_router(clients_router)
 app.include_router(operators_router)
+app.include_router(cities_router)
 # ==================== 10. TELEGRAM BOT ====================
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db)):
@@ -1454,6 +1646,17 @@ class ShopOrderBody(BaseModel):
     partner_id: int
     delivery_address: str
     items: List[OrderItemBody]
+    comment: Optional[str] = None
+    # DIQQAT: shop.html'da qo'shilgan qo'shimcha maydonlar (order_type,
+    # payment_method, promo_code, location, use_cashback) — bularni hozircha
+    # backend qabul qiladi (xato bermaydi), lekin faol ishlatilmaydi.
+    # Sabab: har biri alohida katta ish (masalan Click/Payme integratsiyasi,
+    # promo-kod tizimi) — buni alohida, ehtiyotkorlik bilan qilamiz.
+    order_type: Optional[str] = None
+    payment_method: Optional[str] = None
+    promo_code: Optional[str] = None
+    location: Optional[dict] = None
+    use_cashback: Optional[bool] = None
 
 
 @app.get("/shop", response_class=HTMLResponse)
@@ -1524,7 +1727,14 @@ async def shop_products(partner_id: int, db: AsyncSession = Depends(get_db)):
     )
     products = result.scalars().all()
     return [
-        {"id": p.id, "name": p.name, "price": p.price, "description": p.description}
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": p.price,
+            "description": p.description,
+            "category": p.category or "Boshqa",
+            "image_url": p.image_url,
+        }
         for p in products
     ]
 
@@ -1568,6 +1778,12 @@ async def shop_create_order(body: ShopOrderBody, db: AsyncSession = Depends(get_
     if not order_items_data:
         raise HTTPException(status_code=400, detail="Kamida bitta mahsulot tanlanishi kerak")
 
+    if partner.min_order_amount and total_price < partner.min_order_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bu do'konda minimal buyurtma summasi {partner.min_order_amount:.0f} so'm",
+        )
+
     setting_result = await db.execute(select(SystemSetting))
     setting = setting_result.scalars().first()
     delivery_fee = (setting.base_delivery_fee * setting.weather_multiplier) if setting else 10000.0
@@ -1579,6 +1795,7 @@ async def shop_create_order(body: ShopOrderBody, db: AsyncSession = Depends(get_
         total_price=total_price,
         delivery_fee=delivery_fee,
         delivery_address=body.delivery_address,
+        client_comment=body.comment,
     )
     db.add(new_order)
     await db.flush()
@@ -1635,7 +1852,7 @@ async def partner_dashboard(
 
     orders_result = await db.execute(
         select(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.client), selectinload(Order.courier))
         .where(Order.partner_id == partner.id)
         .order_by(Order.created_at.desc())
         .limit(100)
@@ -1660,11 +1877,24 @@ async def partner_create_product(
     name: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
+    category: str = Form("Boshqa"),
+    image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_partner_user),
 ):
     partner = await _get_own_partner(db, current_user)
-    db.add(Product(partner_id=partner.id, name=name, price=price, description=description, is_available=True))
+    image_url = None
+    if image and image.filename:
+        image_url = await save_uploaded_image(image, "products")
+    db.add(Product(
+        partner_id=partner.id,
+        name=name,
+        price=price,
+        description=description,
+        category=category,
+        image_url=image_url,
+        is_available=True,
+    ))
     await db.commit()
     return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1675,6 +1905,8 @@ async def partner_update_product(
     name: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
+    category: str = Form("Boshqa"),
+    image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_partner_user),
 ):
@@ -1686,6 +1918,9 @@ async def partner_update_product(
     product.name = name
     product.price = price
     product.description = description
+    product.category = category
+    if image and image.filename:
+        product.image_url = await save_uploaded_image(image, "products")
     await db.commit()
     return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
 

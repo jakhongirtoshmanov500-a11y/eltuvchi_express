@@ -2,6 +2,7 @@ from fastapi import Request, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from passlib.context import CryptContext
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -52,34 +53,41 @@ async def require_owner(user: User = Depends(get_current_admin_user)) -> User:
 
 
 async def get_current_partner_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
-    """Hamkor kabineti uchun — faqat PARTNER rolidagi, faol foydalanuvchiga
-    ruxsat beradi. Boshqa hollarda /login sahifasiga qaytaradi."""
+    """Hamkor kabineti uchun.
+
+    DIQQAT: endi bu ROL (role == PARTNER) emas, balki PROFIL MAVJUDLIGI
+    (PartnerProfile bog'langanmi) orqali tekshiriladi. Sabab: bitta odam
+    bir vaqtning o'zida ham mijoz, ham kuryer, ham hamkor bo'lishi mumkin —
+    role maydoni endi faqat "ro'yxatdan o'tgandagi asosiy holat"ni
+    bildiradi, u yagona imkoniyatni cheklamaydi."""
     user_id = request.session.get("user_id")
     if not user_id:
         raise RedirectToLogin()
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.partner_profile))
+    )
     user = result.scalars().first()
 
-    if not user or not user.is_active or user.role != UserRole.PARTNER:
-        request.session.clear()
+    if not user or not user.is_active or not user.partner_profile:
         raise RedirectToLogin()
 
     return user
 
 
 async def get_current_courier_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
-    """Kuryer kabineti uchun — faqat COURIER rolidagi, faol foydalanuvchiga
-    ruxsat beradi."""
+    """Kuryer kabineti uchun — CourierProfile bog'langan bo'lsa yetarli
+    (yuqoridagi izohga qarang — multi-role tufayli role tekshirilmaydi)."""
     user_id = request.session.get("user_id")
     if not user_id:
         raise RedirectToLogin()
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.courier_profile))
+    )
     user = result.scalars().first()
 
-    if not user or not user.is_active or user.role != UserRole.COURIER:
-        request.session.clear()
+    if not user or not user.is_active or not user.courier_profile:
         raise RedirectToLogin()
 
     return user
