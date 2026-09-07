@@ -2139,3 +2139,6 @@ app.include_router(courier_router_app)
 app.include_router(partner_router)
 app.include_router(shop_router)
 app.include_router(finance_router)
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Eltuvchi Express API is running"}
