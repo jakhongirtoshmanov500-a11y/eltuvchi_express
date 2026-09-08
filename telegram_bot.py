@@ -157,11 +157,13 @@ def validate_telegram_init_data(init_data: str, max_age_seconds: int = 86400) ->
     except Exception as e:
         print(f"[Avariya Logi] initData tekshirishda xatolik: {e}")
         return None
-    async def answer_callback_query(callback_query_id: str, text: str | None = None, show_alert: bool = False) -> bool:
-     """
-Telegram Inline tugma bosilganda paydo bo'ladigan yuklanish (loading) holatini
-to'xtatish yoki foydalanuvchiga kichik xabar/alert chiqarish uchun funksiya.
-"""
+
+
+async def answer_callback_query(callback_query_id: str, text: str | None = None, show_alert: bool = False) -> bool:
+    """
+    Telegram Inline tugma bosilganda paydo bo'ladigan yuklanish (loading) holatini
+    to'xtatish yoki foydalanuvchiga kichik xabar/alert chiqarish uchun funksiya.
+    """
     if not TELEGRAM_API_BASE or not callback_query_id:
         return False
 
