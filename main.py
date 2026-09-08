@@ -2402,13 +2402,16 @@ async def courier_mark_delivered(
         client_result = await db.execute(select(User).where(User.id == order.client_id))
         client = client_result.scalars().first()
         if client and client.telegram_id:
-            await send_telegram_message(client.telegram_id, f"✅ Buyurtma #{order.id} — <b>Yetkazildi</b>! Xaridingiz uchun rahmat.")
+            await send_telegram_message(
+                client.telegram_id, 
+                f"✅ Buyurtma #{order.id} — <b>Yetkazildi</b>! Xaridingiz uchun rahmat."
+            )
     except Exception as e:
         print(f"Bildirishnoma xatoligi: {e}")
 
     return RedirectResponse(url="/courier", status_code=status.HTTP_303_SEE_OTHER)
 
-
+# Routerlarni ulash
 app.include_router(courier_router_app)
 app.include_router(partner_router)
 app.include_router(shop_router)
