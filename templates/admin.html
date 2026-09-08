@@ -582,6 +582,34 @@
 
         <section class="app-page" data-page="moliya" style="display:none;">
         <!-- MOLIYAVIY BOSHQARUV (faqat OWNER) -->
+
+        {% if pending_withdrawals %}
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md border-2 border-amber-400 mb-6">
+            <h2 class="theme-title text-lg font-bold mb-4 text-amber-700">⏳ Kutilayotgan Pul Yechish So'rovlari ({{ pending_withdrawals|length }})</h2>
+            <div class="space-y-2">
+                {% for wd in pending_withdrawals %}
+                <div class="flex justify-between items-center border rounded-lg p-3">
+                    <div>
+                        <p class="text-sm font-semibold">
+                            {% if wd.user %}🛵 {{ wd.user.full_name }}{% elif wd.partner %}🏪 {{ wd.partner.brand_name }}{% endif %}
+                        </p>
+                        <p class="text-xs text-gray-400">{{ wd.requested_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-indigo-700">{{ "%.0f"|format(wd.amount) }} so'm</span>
+                        <form action="/admin/finance/withdrawals/{{ wd.id }}/approve" method="POST" onsubmit="return confirm('Pulni real hayotda (Click/Payme/naqd) ALLAQACHON o\'tkazdingizmi? Faqat shundan keyin tasdiqlang.');">
+                            <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold">✅ To'landi</button>
+                        </form>
+                        <form action="/admin/finance/withdrawals/{{ wd.id }}/reject" method="POST">
+                            <button type="submit" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-semibold">✕ Rad etish</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
                 <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">💰 Kuryer Balansi</h2>
@@ -971,6 +999,42 @@
             {% endif %}
         </div>
         </section>
+
+        {% if is_owner %}
+        <!-- SHARTLAR (faqat OWNER) -->
+        <section class="app-page" data-page="shartlar" style="display:none;">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+                <h2 class="theme-title text-base font-bold mb-3 text-indigo-700">🛵 Kuryerlik Shartlari</h2>
+                <form action="/admin/settings/terms" method="POST" class="space-y-3">
+                    <textarea name="courier_terms" rows="10" placeholder="Kuryer bo'lib ishlash shartlari..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.courier_terms if system_setting and system_setting.courier_terms else '' }}</textarea>
+                    <input type="hidden" name="partner_terms" value="{{ system_setting.partner_terms if system_setting and system_setting.partner_terms else '' }}">
+                    <input type="hidden" name="client_terms" value="{{ system_setting.client_terms if system_setting and system_setting.client_terms else '' }}">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+                </form>
+            </div>
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+                <h2 class="theme-title text-base font-bold mb-3 text-indigo-700">🏪 Hamkorlik Shartlari</h2>
+                <form action="/admin/settings/terms" method="POST" class="space-y-3">
+                    <input type="hidden" name="courier_terms" value="{{ system_setting.courier_terms if system_setting and system_setting.courier_terms else '' }}">
+                    <textarea name="partner_terms" rows="10" placeholder="Hamkor bo'lish shartlari..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.partner_terms if system_setting and system_setting.partner_terms else '' }}</textarea>
+                    <input type="hidden" name="client_terms" value="{{ system_setting.client_terms if system_setting and system_setting.client_terms else '' }}">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+                </form>
+            </div>
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md">
+                <h2 class="theme-title text-base font-bold mb-3 text-indigo-700">🛍 Mijozlik Shartlari</h2>
+                <form action="/admin/settings/terms" method="POST" class="space-y-3">
+                    <input type="hidden" name="courier_terms" value="{{ system_setting.courier_terms if system_setting and system_setting.courier_terms else '' }}">
+                    <input type="hidden" name="partner_terms" value="{{ system_setting.partner_terms if system_setting and system_setting.partner_terms else '' }}">
+                    <textarea name="client_terms" rows="10" placeholder="Mijozlik shartlari (hozircha faqat ma'lumot uchun, majburiy ko'rsatilmaydi)..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.client_terms if system_setting and system_setting.client_terms else '' }}</textarea>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+                </form>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">Kuryer/hamkor botda shu rolni tanlaganda, avval shu matnni ko'radi va "Roziman" bosishi shart — aks holda davom etolmaydi.</p>
+        </section>
+        {% endif %}
 
         </main>
     </div>

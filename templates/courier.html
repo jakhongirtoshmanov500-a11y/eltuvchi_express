@@ -34,6 +34,30 @@
             <p class="text-[11px] text-gray-400 mt-1">
                 Bu — naqd pulda yig'gan, hali egasiga topshirmagan summangiz. Har yetkazgan buyurtmadan keyin bu raqam avtomatik oshadi; egasiga naqd pul topshirganingizda, u buni kamaytiradi.
             </p>
+
+            {% if courier_profile and courier_profile.balance < 0 %}
+            <!-- Balans manfiy — bu holda egasi SIZGA qarz (masalan onlayn to'lovli
+                 buyurtmalarda pul sizning qo'lingizga tegmagan bo'lsa) — shu holatda
+                 pul so'rash imkoni ochiladi. -->
+            <form action="/courier/withdraw" method="POST" class="flex gap-2 mt-3 pt-3 border-t">
+                <input type="number" name="amount" placeholder="Summa" max="{{ -courier_profile.balance }}" class="flex-1 p-2 border rounded-lg text-sm" required>
+                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap">💸 Yechib olish</button>
+            </form>
+            {% endif %}
+
+            {% if withdrawal_requests %}
+            <div class="mt-3 pt-3 border-t space-y-1">
+                {% for wd in withdrawal_requests %}
+                <div class="flex justify-between text-xs">
+                    <span>{{ wd.requested_at.strftime('%d.%m %H:%M') }}</span>
+                    <span class="font-semibold">{{ "%.0f"|format(wd.amount) }} so'm</span>
+                    <span class="{% if wd.status.value == 'pending' %}text-amber-600{% elif wd.status.value == 'approved' %}text-green-600{% else %}text-red-600{% endif %}">
+                        {% if wd.status.value == 'pending' %}⏳ Kutilmoqda{% elif wd.status.value == 'approved' %}✅ To'landi{% else %}✕ Rad etildi{% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
 
         {% if my_active_orders %}

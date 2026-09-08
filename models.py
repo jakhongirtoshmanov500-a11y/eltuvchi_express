@@ -32,6 +32,17 @@ class WeatherCondition(enum.Enum):
     WINDY = "windy"
 
 
+class WithdrawalStatus(enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class TransactionType(enum.Enum):
+    DEPOSIT = "deposit"      # balansga pul qo'shish (masalan, naqd pulni "hisobga olish")
+    WITHDRAWAL = "withdrawal"  # balansdan pul yechish (masalan, kuryerga naqd to'lab, balansdan ayirish)
+
+
 class City(Base):
     __tablename__ = "cities"
 
@@ -62,10 +73,11 @@ class User(Base):
     city = relationship("City", back_populates="operators")
 
     # Faqat mijoz (CLIENT) uchun ishlatiladi — tug'ilgan kun bonusi tizimi uchun.
+    # Mijoz o'z kabinetida (keyingi bosqichda) kiritadi, hozircha bo'sh qoladi.
     birth_date = Column(Date, nullable=True)
 
     # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
-    # unga bog'liq profil ham avtomatik o'chadi
+    # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
     courier_profile = relationship("CourierProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     partner_profile = relationship("PartnerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
@@ -74,12 +86,13 @@ class CourierProfile(Base):
     __tablename__ = "courier_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     passport_data = Column(String, nullable=True)
     transport_type = Column(String, default="walking")
     is_approved = Column(Boolean, default=False)
     is_online = Column(Boolean, default=False)
     balance = Column(Float, default=0.0)
+    terms_accepted_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="courier_profile")
 
@@ -88,7 +101,7 @@ class PartnerProfile(Base):
     __tablename__ = "partner_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
     brand_name = Column(String, nullable=False)
     category = Column(String, nullable=False)
@@ -102,12 +115,11 @@ class PartnerProfile(Base):
 
     # Minimal buyurtma summasi — bundan kam summaga buyurtma qabul qilinmaydi
     min_order_amount = Column(Float, default=0.0)
+    terms_accepted_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
     products = relationship("Product", back_populates="partner", cascade="all, delete-orphan")
-    
-    # Hamkor buyurtmalari ro'yxatiga bog'lanish (main.py ishlashi uchun zarur)
     orders = relationship("Order", back_populates="partner")
 
 
@@ -121,7 +133,8 @@ class Product(Base):
     price = Column(Float, nullable=False)
     is_available = Column(Boolean, default=True)
 
-    # Rasm va kategoriya — mijoz ilovasida menyu chiroyli ko'rinishi uchun
+    # Rasm va kategoriya — mijoz ilovasida menyu chiroyli va tartibli
+    # ko'rinishi uchun (masalan "Ichimliklar", "Pitsalar")
     image_url = Column(String, nullable=True)
     category = Column(String, nullable=True, default="Boshqa")
 
@@ -146,13 +159,14 @@ class Order(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # main.py dagi compute_period_stats va boshqa statistikalar uchun zarur bog'lanishlar
+    # Buyurtma tarkibidagi mahsulotlar (nechta lavash, nechta kola va h.k.)
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    # Mijoz va kuryerning ismi/telefonini qulay ko'rsatish uchun (admin/hamkor
+    # panellarida "kimga qo'ng'iroq qilish kerak" degan savolga javob beradi)
     client = relationship("User", foreign_keys=[client_id])
     courier = relationship("User", foreign_keys=[courier_id])
     partner = relationship("PartnerProfile", back_populates="orders")
-
-    # Buyurtma tarkibidagi mahsulotlar
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
@@ -160,8 +174,15 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    # product_id nullable=True: agar mahsulot keyinchalik o'chirilsa ham,
+    # buyurtma tarixi (order_item) saqlanib qoladi — faqat bog'lanish uziladi
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
 
+    # DIQQAT: nom va narx shu yerda "suratga olinadi" (snapshot).
+    # Sabab: agar ertaga admin mahsulot narxini o'zgartirsa yoki nomini
+    # tahrirlasa, ESKI buyurtmalar o'sha vaqtdagi haqiqiy narx/nomni
+    # ko'rsatishi kerak — hozirgi narxni emas. Aks holda hisobotlar
+    # (masalan, "shu oy qancha sotildi") noto'g'ri chiqib qoladi.
     product_name = Column(String, nullable=False)
     unit_price = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
@@ -180,16 +201,21 @@ class SystemSetting(Base):
     weather_multiplier = Column(Float, default=1.0)
     auto_weather_pricing = Column(Boolean, default=True)
 
+    # Yetkazish narxining necha foizi kuryerga tegishli ekani (qolgani egasiga qoladi).
+    # Masalan 80.0 = yetkazish narxining 80%i kuryerga, 20%i egasiga.
     courier_share_percent = Column(Float, default=80.0)
 
+    # Tug'ilgan kun bonusi, referal va cashback dasturlari — bularning
+    # barchasini faqat OWNER qo'lda kiritadi/o'zgartiradi.
     birthday_bonus_amount = Column(Float, default=0.0)
     referral_program_text = Column(Text, nullable=True)
     bonus_cashback_text = Column(Text, nullable=True)
 
-
-class TransactionType(enum.Enum):
-    DEPOSIT = "deposit"
-    WITHDRAWAL = "withdrawal"
+    # Har bir rol uchun alohida shartlar — odam shu rolni tanlaganda
+    # birinchi bo'lib shu matn ko'rsatiladi, "Roziman" bosmasa davom etolmaydi.
+    courier_terms = Column(Text, nullable=True)
+    partner_terms = Column(Text, nullable=True)
+    client_terms = Column(Text, nullable=True)
 
 
 class Transaction(Base):
@@ -197,6 +223,8 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    # Tranzaksiya yoki kuryerga (user_id), yoki hamkorga (partner_id) tegishli bo'ladi —
+    # ikkalasi bir vaqtda to'lmaydi, faqat bittasi ishlatiladi.
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
 
@@ -204,9 +232,35 @@ class Transaction(Base):
     amount = Column(Float, nullable=False)
     note = Column(String, nullable=True)
 
+    # Kim amalga oshirganini bilish uchun (hisobot va shaffoflik uchun muhim —
+    # kim, qachon, kimning balansiga qo'l tekkizganini keyin tekshirish mumkin bo'lishi kerak)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", foreign_keys=[user_id])
     partner = relationship("PartnerProfile", foreign_keys=[partner_id])
     created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class WithdrawalRequest(Base):
+    """Kuryer yoki hamkorning 'pulimni bermoqchiman/yechib olmoqchiman'
+    so'rovi. Hozircha haqiqiy bank/karta o'tkazmasi AVTOMATIK emas —
+    OWNER buni ko'rib, real hayotda (Click/Payme orqali) pulni jismonan
+    o'tkazadi, keyin shu yerda 'Tasdiqlash' bosadi."""
+    __tablename__ = "withdrawal_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
+
+    amount = Column(Float, nullable=False)
+    status = Column(Enum(WithdrawalStatus), default=WithdrawalStatus.PENDING)
+
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    processed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    note = Column(String, nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    partner = relationship("PartnerProfile", foreign_keys=[partner_id])
+    processed_by = relationship("User", foreign_keys=[processed_by_id])

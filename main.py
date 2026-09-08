@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter, UploadFile, File
@@ -22,6 +22,7 @@ from telegram_bot import (
     normalize_phone,
     set_telegram_webhook,
     validate_telegram_init_data,
+    answer_callback_query,
 )
 from models import (
     User,
@@ -37,6 +38,8 @@ from models import (
     City,
     Transaction,
     TransactionType,
+    WithdrawalRequest,
+    WithdrawalStatus,
 )
 from auth import (
     hash_password,
@@ -445,6 +448,17 @@ async def admin_dashboard(
         )
         recent_transactions = tx_query.scalars().all()
 
+    # ---- KUTILAYOTGAN PUL YECHISH SO'ROVLARI (faqat OWNER) ----
+    pending_withdrawals = []
+    if is_owner:
+        wd_query = await db.execute(
+            select(WithdrawalRequest)
+            .options(selectinload(WithdrawalRequest.user), selectinload(WithdrawalRequest.partner))
+            .where(WithdrawalRequest.status == WithdrawalStatus.PENDING)
+            .order_by(WithdrawalRequest.requested_at)
+        )
+        pending_withdrawals = wd_query.scalars().all()
+
     # ---- ANALITIKA (faqat OWNER) ----
     # DIQQAT: komissiya foizi har bir do'kon uchun boshqacha bo'lishi mumkin
     # (partner.commission_rate), shuning uchun buni SQL darajasida bitta
@@ -532,6 +546,7 @@ async def admin_dashboard(
             "status_labels": STATUS_LABELS_UZ,
             "next_status_map": NEXT_STATUS_MAP,
             "recent_transactions": recent_transactions,
+            "pending_withdrawals": pending_withdrawals,
             "birthday_clients_today": birthday_clients_today,
             "analytics": analytics,
         },
@@ -767,6 +782,21 @@ async def update_cashback_setting(
 ):
     setting = await _get_or_create_setting(db)
     setting.bonus_cashback_text = bonus_cashback_text
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@settings_router.post("/terms")
+async def update_terms_settings(
+    courier_terms: str = Form(""),
+    partner_terms: str = Form(""),
+    client_terms: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    setting = await _get_or_create_setting(db)
+    setting.courier_terms = courier_terms
+    setting.partner_terms = partner_terms
+    setting.client_terms = client_terms
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1437,6 +1467,82 @@ async def update_partner_balance(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@finance_router.post("/withdrawals/{request_id}/approve")
+async def approve_withdrawal(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """DIQQAT: bu tugmani bosishdan oldin, pulni real hayotda (Click/Payme
+    yoki naqd) kuryer/hamkorga siz ALLAQACHON o'tkazgan bo'lishingiz kerak —
+    bu tugma faqat tizimdagi balansni shunga mos ravishda kamaytiradi va
+    tarixga yozadi, pulni o'zi jismonan yubormaydi (buning uchun hozircha
+    haqiqiy to'lov integratsiyasi yo'q)."""
+    result = await db.execute(select(WithdrawalRequest).where(WithdrawalRequest.id == request_id))
+    wd = result.scalars().first()
+    if not wd:
+        raise HTTPException(status_code=404, detail="So'rov topilmadi")
+    if wd.status != WithdrawalStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Bu so'rov allaqachon ko'rib chiqilgan")
+
+    if wd.user_id:
+        courier_result = await db.execute(
+            select(CourierProfile).where(CourierProfile.user_id == wd.user_id)
+        )
+        profile = courier_result.scalars().first()
+        if profile:
+            profile.balance -= wd.amount
+        db.add(Transaction(
+            user_id=wd.user_id, type=TransactionType.WITHDRAWAL, amount=wd.amount,
+            note=f"Pul yechish so'rovi #{wd.id} tasdiqlandi", created_by_id=current_user.id,
+        ))
+    elif wd.partner_id:
+        partner_result = await db.execute(select(PartnerProfile).where(PartnerProfile.id == wd.partner_id))
+        partner = partner_result.scalars().first()
+        if partner:
+            partner.balance -= wd.amount
+        db.add(Transaction(
+            partner_id=wd.partner_id, type=TransactionType.WITHDRAWAL, amount=wd.amount,
+            note=f"Pul yechish so'rovi #{wd.id} tasdiqlandi", created_by_id=current_user.id,
+        ))
+
+    wd.status = WithdrawalStatus.APPROVED
+    wd.processed_at = datetime.utcnow()
+    wd.processed_by_id = current_user.id
+    await db.commit()
+
+    try:
+        if wd.user_id:
+            u_result = await db.execute(select(User).where(User.id == wd.user_id))
+            u = u_result.scalars().first()
+            if u and u.telegram_id:
+                await send_telegram_message(u.telegram_id, f"✅ {wd.amount:,.0f} so'm yechib olish so'rovingiz tasdiqlandi.")
+    except Exception as e:
+        print(f"Bildirishnoma xatoligi: {e}")
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@finance_router.post("/withdrawals/{request_id}/reject")
+async def reject_withdrawal(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    result = await db.execute(select(WithdrawalRequest).where(WithdrawalRequest.id == request_id))
+    wd = result.scalars().first()
+    if not wd:
+        raise HTTPException(status_code=404, detail="So'rov topilmadi")
+    if wd.status != WithdrawalStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Bu so'rov allaqachon ko'rib chiqilgan")
+
+    wd.status = WithdrawalStatus.REJECTED
+    wd.processed_at = datetime.utcnow()
+    wd.processed_by_id = current_user.id
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # ==================== 9. TIZIMNI TOZALASH — RESET (faqat OWNER) ====================
 @app.post("/admin/reset")
 async def reset_system(
@@ -1531,12 +1637,76 @@ app.include_router(clients_router)
 app.include_router(operators_router)
 app.include_router(cities_router)
 # ==================== 10. TELEGRAM BOT ====================
+# Botda ko'p bosqichli suhbat (masalan "PIN kutilmoqda") uchun vaqtinchalik
+# xotira. DIQQAT: bu — oddiy Python lug'ati, ya'ni faqat BITTA server
+# jarayoni (process) ishlayotganda to'g'ri ishlaydi (Render'ning bepul/
+# standart web-service rejimi shunday). Agar kelajakda bir nechta
+# jarayonda (masalan bir nechta "worker") ishga tushirilsa, bu holatni
+# Redis kabi umumiy xotiraga ko'chirish kerak bo'ladi.
+bot_conversation_state: dict = {}
+
+DEFAULT_COURIER_TERMS = "Kuryer sifatida ishlash shartlari hali kiritilmagan. Iltimos, adminstratsiya bilan bog'laning."
+DEFAULT_PARTNER_TERMS = "Hamkorlik shartlari hali kiritilmagan. Iltimos, adminstratsiya bilan bog'laning."
+
+
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """Telegram har bir yangi xabar/harakat haqida shu manzilga POST
-    so'rov yuboradi. Biz bu yerda faqat ikkita narsani qayta ishlaymiz:
-    /start buyrug'i va foydalanuvchi ulashgan telefon raqami (contact)."""
+    so'rov yuboradi. Bu yerda: /start, telefon ulashish (contact), tugma
+    bosish (callback_query) va PIN kiritish (oddiy matn) qayta ishlanadi."""
     update = await request.json()
+
+    # ---- TUGMA BOSILGANDA (masalan "Kuryer bo'lish", "Roziman") ----
+    callback_query = update.get("callback_query")
+    if callback_query:
+        await answer_callback_query(callback_query["id"])
+        chat_id = callback_query["message"]["chat"]["id"]
+        data = callback_query.get("data", "")
+
+        user_result = await db.execute(select(User).where(User.telegram_id == str(chat_id)))
+        user = user_result.scalars().first()
+        if not user:
+            await send_telegram_message(chat_id, "Avval /start bosib, telefon raqamingizni ulashing.")
+            return {"ok": True}
+
+        if data in ("become:courier", "become:partner"):
+            role_key = data.split(":")[1]
+            already = False
+            if role_key == "courier":
+                existing = await db.execute(select(CourierProfile).where(CourierProfile.user_id == user.id))
+                already = existing.scalars().first() is not None
+            else:
+                existing = await db.execute(select(PartnerProfile).where(PartnerProfile.user_id == user.id))
+                already = existing.scalars().first() is not None
+
+            if already:
+                await send_telegram_message(chat_id, "Siz allaqachon shu rolda ro'yxatdan o'tgansiz ✅")
+                return {"ok": True}
+
+            setting = await _get_or_create_setting(db)
+            terms = (setting.courier_terms if role_key == "courier" else setting.partner_terms) or (
+                DEFAULT_COURIER_TERMS if role_key == "courier" else DEFAULT_PARTNER_TERMS
+            )
+            label = "Kuryer" if role_key == "courier" else "Hamkor"
+            await send_telegram_message(
+                chat_id,
+                f"📄 <b>{label} bo'lish shartlari:</b>\n\n{terms}",
+                reply_markup={"inline_keyboard": [[{"text": "✅ Roziman va davom etaman", "callback_data": f"agree:{role_key}"}]]},
+            )
+            return {"ok": True}
+
+        if data in ("agree:courier", "agree:partner"):
+            role_key = data.split(":")[1]
+            bot_conversation_state[chat_id] = {"awaiting_pin_for": role_key}
+            await send_telegram_message(
+                chat_id,
+                "🔐 Endi o'zingiz uchun 4 xonali PIN kod o'ylab toping va shu yerga yozing (masalan: 4271).\n"
+                "Bu PIN bilan keyinchalik kompyuter yoki telefondan kabinetingizga kirasiz.",
+            )
+            return {"ok": True}
+
+        return {"ok": True}
+
     message = update.get("message")
     if not message:
         return {"ok": True}
@@ -1546,6 +1716,7 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
     contact = message.get("contact")
 
     if text == "/start":
+        bot_conversation_state.pop(chat_id, None)
         await send_telegram_message(
             chat_id,
             "Assalomu alaykum! 👋 <b>Eltuvchi Express</b> botiga xush kelibsiz.\n\n"
@@ -1554,34 +1725,93 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
         )
         return {"ok": True}
 
+    # ---- PIN KUTILAYOTGAN BO'LSA (foydalanuvchi oddiy matn yuboryapti) ----
+    pending = bot_conversation_state.get(chat_id)
+    if pending and "awaiting_pin_for" in pending and text:
+        pin = text.strip()
+        if not (pin.isdigit() and len(pin) == 4):
+            await send_telegram_message(chat_id, "❗ PIN aynan 4 ta raqamdan iborat bo'lishi kerak. Qaytadan urinib ko'ring:")
+            return {"ok": True}
+
+        user_result = await db.execute(select(User).where(User.telegram_id == str(chat_id)))
+        user = user_result.scalars().first()
+        if not user:
+            bot_conversation_state.pop(chat_id, None)
+            await send_telegram_message(chat_id, "Xatolik yuz berdi — /start bosib qaytadan urinib ko'ring.")
+            return {"ok": True}
+
+        role_key = pending["awaiting_pin_for"]
+        user.password_hash = hash_password(pin)
+
+        if role_key == "courier":
+            db.add(CourierProfile(
+                user_id=user.id, transport_type="walking", is_approved=True,
+                terms_accepted_at=datetime.utcnow(),
+            ))
+            await db.commit()
+            await send_telegram_message(
+                chat_id,
+                "🎉 Tabriklaymiz — endi siz kuryersiz!\n\n"
+                "Kabinetingizga shu telefon raqamingiz va PIN kodingiz bilan istalgan qurilmadan "
+                "(kompyuter yoki telefon) kirishingiz mumkin.\n\n"
+                "Sizga qaysi shaharda ishlashingiz OWNER/operator tomonidan tayinlanadi — "
+                "agar hali tayinlanmagan bo'lsa, ular bilan bog'laning.",
+            )
+        else:
+            # Hamkor (do'kon) bo'lish — bunga do'kon nomi, manzili, shahri
+            # kabi ko'p ma'lumot kerak, buni chatda yig'ish noqulay va
+            # xatoga moyil. Shuning uchun: PIN va rozilikni saqlaymiz,
+            # so'ng OWNER'ga xabar boradi — u admin paneldagi mavjud
+            # "Yangi Do'kon Qo'shish" formasida shu telefon raqamni
+            # "Kirish uchun telefon" maydoniga yozib, bir necha soniyada
+            # to'liq sozlab beradi (parol allaqachon saqlangani uchun
+            # qayta kiritishning hojati yo'q).
+            await db.commit()
+
+            owner_result = await db.execute(select(User).where(User.role == UserRole.OWNER))
+            owner_user = owner_result.scalars().first()
+            if owner_user and owner_user.telegram_id:
+                await send_telegram_message(
+                    owner_user.telegram_id,
+                    f"🏪 Yangi hamkorlik so'rovi!\n\n"
+                    f"<b>Ism:</b> {user.full_name}\n"
+                    f"<b>Telefon:</b> {user.phone_number}\n\n"
+                    f"Admin panelda \"Yangi Do'kon Qo'shish\" formasidagi \"Kirish uchun telefon\" "
+                    f"maydoniga shu raqamni yozib, do'konni sozlab bering (PIN allaqachon saqlangan).",
+                )
+
+            await send_telegram_message(
+                chat_id,
+                "✅ So'rovingiz qabul qilindi!\n\n"
+                "Tez orada administratsiya siz bilan bog'lanib, do'koningizni tizimga to'liq qo'shib beradi.",
+            )
+
+        bot_conversation_state.pop(chat_id, None)
+        return {"ok": True}
+
     if contact:
         phone = normalize_phone(contact.get("phone_number", ""))
         result = await db.execute(select(User).where(User.phone_number == phone))
         user = result.scalars().first()
 
         shop_url = str(request.base_url).rstrip("/") + "/shop"
-        menu_keyboard = {
-            "inline_keyboard": [[{"text": "🛍 Menyuni ochish", "web_app": {"url": shop_url}}]]
+        role_choice_keyboard = {
+            "inline_keyboard": [
+                [{"text": "🛍 Menyuni ochish (mijoz)", "web_app": {"url": shop_url}}],
+                [{"text": "🛵 Kuryer bo'lib ishlash", "callback_data": "become:courier"}],
+                [{"text": "🏪 Hamkor bo'lish", "callback_data": "become:partner"}],
+            ]
         }
 
         if user:
             user.telegram_id = str(chat_id)
             await db.commit()
-            role_names = {
-                UserRole.CLIENT: "mijoz",
-                UserRole.COURIER: "kuryer",
-                UserRole.PARTNER: "hamkor",
-            }
-            role_text = role_names.get(user.role, "foydalanuvchi")
             await send_telegram_message(
                 chat_id,
-                f"✅ Muvaffaqiyatli ulandingiz, <b>{user.full_name}</b>!\n"
-                f"Siz tizimda <b>{role_text}</b> sifatida ro'yxatdan o'tgansiz. "
-                f"Endi buyurtmalaringiz haqida shu yerga xabar kelib turadi.",
-                reply_markup=menu_keyboard if user.role == UserRole.CLIENT else None,
+                f"✅ Muvaffaqiyatli ulandingiz, <b>{user.full_name}</b>!\n\nNima qilmoqchisiz?",
+                reply_markup=role_choice_keyboard,
             )
         else:
-            # Bazada bunday raqam yo'q — demak bu yangi mijoz, avtomatik ro'yxatga olamiz
             new_user = User(
                 full_name=contact.get("first_name") or "Mijoz",
                 phone_number=phone,
@@ -1592,9 +1822,8 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
             await db.commit()
             await send_telegram_message(
                 chat_id,
-                "✅ Ro'yxatdan muvaffaqiyatli o'tdingiz!\n"
-                "Endi quyidagi tugma orqali menyuni ochib, buyurtma berishingiz mumkin:",
-                reply_markup=menu_keyboard,
+                "✅ Ro'yxatdan muvaffaqiyatli o'tdingiz!\n\nNima qilmoqchisiz?",
+                reply_markup=role_choice_keyboard,
             )
         return {"ok": True}
 
@@ -1859,6 +2088,14 @@ async def partner_dashboard(
     )
     orders = orders_result.scalars().all()
 
+    withdrawal_result = await db.execute(
+        select(WithdrawalRequest)
+        .where(WithdrawalRequest.partner_id == partner.id)
+        .order_by(WithdrawalRequest.requested_at.desc())
+        .limit(10)
+    )
+    withdrawal_requests = withdrawal_result.scalars().all()
+
     return templates.TemplateResponse(
         request=request,
         name="partner.html",
@@ -1868,8 +2105,23 @@ async def partner_dashboard(
             "orders": orders,
             "status_labels": STATUS_LABELS_UZ,
             "current_user": current_user,
+            "withdrawal_requests": withdrawal_requests,
         },
     )
+
+
+@partner_router.post("/withdraw")
+async def partner_request_withdrawal(
+    amount: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_partner_user),
+):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Summa musbat bo'lishi kerak")
+    partner = await _get_own_partner(db, current_user)
+    db.add(WithdrawalRequest(partner_id=partner.id, amount=amount, status=WithdrawalStatus.PENDING))
+    await db.commit()
+    return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @partner_router.post("/products/create")
@@ -2055,6 +2307,14 @@ async def courier_dashboard(
     )
     history_orders = (await db.execute(history_stmt)).scalars().all()
 
+    withdrawal_result = await db.execute(
+        select(WithdrawalRequest)
+        .where(WithdrawalRequest.user_id == current_user.id)
+        .order_by(WithdrawalRequest.requested_at.desc())
+        .limit(10)
+    )
+    withdrawal_requests = withdrawal_result.scalars().all()
+
     return templates.TemplateResponse(
         request=request,
         name="courier.html",
@@ -2064,8 +2324,22 @@ async def courier_dashboard(
             "available_orders": available_orders,
             "my_active_orders": my_active_orders,
             "history_orders": history_orders,
+            "withdrawal_requests": withdrawal_requests,
         },
     )
+
+
+@courier_router_app.post("/withdraw")
+async def courier_request_withdrawal(
+    amount: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_courier_user),
+):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Summa musbat bo'lishi kerak")
+    db.add(WithdrawalRequest(user_id=current_user.id, amount=amount, status=WithdrawalStatus.PENDING))
+    await db.commit()
+    return RedirectResponse(url="/courier", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @courier_router_app.post("/orders/{order_id}/accept")
@@ -2139,6 +2413,7 @@ app.include_router(courier_router_app)
 app.include_router(partner_router)
 app.include_router(shop_router)
 app.include_router(finance_router)
+
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "Eltuvchi Express API is running"}
