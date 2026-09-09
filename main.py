@@ -1,5 +1,6 @@
 import json
 import os
+import html
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime
@@ -23,6 +24,7 @@ from telegram_bot import (
     set_telegram_webhook,
     validate_telegram_init_data,
     answer_callback_query,
+    close_telegram_bot_client,
 )
 from models import (
     User,
@@ -125,6 +127,8 @@ async def lifespan(app: FastAPI):
     print("PostgreSQL jadvallari tayyor (sxema Alembic orqali boshqariladi).")
     await seed_default_data()
     yield
+    # Server to'xtatilganda Telegram uchun ochilgan HTTP ulanishlarni yopamiz
+    await close_telegram_bot_client()
 
 
 app = FastAPI(title="Eltuvchi Express API", lifespan=lifespan)
@@ -767,10 +771,12 @@ async def update_birthday_setting(
 @settings_router.post("/referral")
 async def update_referral_setting(
     referral_program_text: str = Form(""),
+    referral_visible: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     setting = await _get_or_create_setting(db)
     setting.referral_program_text = referral_program_text
+    setting.referral_visible = referral_visible
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -778,10 +784,28 @@ async def update_referral_setting(
 @settings_router.post("/cashback")
 async def update_cashback_setting(
     bonus_cashback_text: str = Form(""),
+    cashback_visible: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     setting = await _get_or_create_setting(db)
     setting.bonus_cashback_text = bonus_cashback_text
+    setting.cashback_visible = cashback_visible
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@settings_router.post("/banner")
+async def update_banner_setting(
+    banner_link_url: str = Form(""),
+    banner_is_active: bool = Form(False),
+    banner_image: Optional[UploadFile] = File(None),
+    db: AsyncSession = Depends(get_db),
+):
+    setting = await _get_or_create_setting(db)
+    setting.banner_link_url = banner_link_url
+    setting.banner_is_active = banner_is_active
+    if banner_image and banner_image.filename:
+        setting.banner_image_url = await save_uploaded_image(banner_image, "banners")
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1663,49 +1687,69 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
         chat_id = callback_query["message"]["chat"]["id"]
         data = callback_query.get("data", "")
 
-        user_result = await db.execute(select(User).where(User.telegram_id == str(chat_id)))
-        user = user_result.scalars().first()
-        if not user:
-            await send_telegram_message(chat_id, "Avval /start bosib, telefon raqamingizni ulashing.")
-            return {"ok": True}
-
-        if data in ("become:courier", "become:partner"):
-            role_key = data.split(":")[1]
-            already = False
-            if role_key == "courier":
-                existing = await db.execute(select(CourierProfile).where(CourierProfile.user_id == user.id))
-                already = existing.scalars().first() is not None
-            else:
-                existing = await db.execute(select(PartnerProfile).where(PartnerProfile.user_id == user.id))
-                already = existing.scalars().first() is not None
-
-            if already:
-                await send_telegram_message(chat_id, "Siz allaqachon shu rolda ro'yxatdan o'tgansiz ✅")
+        try:
+            user_result = await db.execute(select(User).where(User.telegram_id == str(chat_id)))
+            user = user_result.scalars().first()
+            if not user:
+                await send_telegram_message(chat_id, "Avval /start bosib, telefon raqamingizni ulashing.")
                 return {"ok": True}
 
-            setting = await _get_or_create_setting(db)
-            terms = (setting.courier_terms if role_key == "courier" else setting.partner_terms) or (
-                DEFAULT_COURIER_TERMS if role_key == "courier" else DEFAULT_PARTNER_TERMS
-            )
-            label = "Kuryer" if role_key == "courier" else "Hamkor"
-            await send_telegram_message(
-                chat_id,
-                f"📄 <b>{label} bo'lish shartlari:</b>\n\n{terms}",
-                reply_markup={"inline_keyboard": [[{"text": "✅ Roziman va davom etaman", "callback_data": f"agree:{role_key}"}]]},
-            )
-            return {"ok": True}
+            if data in ("become:courier", "become:partner"):
+                role_key = data.split(":")[1]
+                already = False
+                if role_key == "courier":
+                    existing = await db.execute(select(CourierProfile).where(CourierProfile.user_id == user.id))
+                    already = existing.scalars().first() is not None
+                else:
+                    existing = await db.execute(select(PartnerProfile).where(PartnerProfile.user_id == user.id))
+                    already = existing.scalars().first() is not None
 
-        if data in ("agree:courier", "agree:partner"):
-            role_key = data.split(":")[1]
-            bot_conversation_state[chat_id] = {"awaiting_pin_for": role_key}
-            await send_telegram_message(
-                chat_id,
-                "🔐 Endi o'zingiz uchun 4 xonali PIN kod o'ylab toping va shu yerga yozing (masalan: 4271).\n"
-                "Bu PIN bilan keyinchalik kompyuter yoki telefondan kabinetingizga kirasiz.",
-            )
-            return {"ok": True}
+                if already:
+                    await send_telegram_message(chat_id, "Siz allaqachon shu rolda ro'yxatdan o'tgansiz ✅")
+                    return {"ok": True}
 
-        return {"ok": True}
+                setting = await _get_or_create_setting(db)
+                raw_terms = (setting.courier_terms if role_key == "courier" else setting.partner_terms) or (
+                    DEFAULT_COURIER_TERMS if role_key == "courier" else DEFAULT_PARTNER_TERMS
+                )
+                # DIQQAT: xabar HTML formatida (parse_mode=HTML) yuboriladi.
+                # Agar OWNER shartlar matniga "<", ">" yoki "&" kabi belgilarni
+                # yozib qo'ysa, Telegram buni noto'g'ri HTML deb hisoblab,
+                # xabarni BUTUNLAY rad etadi — va foydalanuvchi tugmani
+                # bossa ham "hech narsa bo'lmayapti" degan taassurot qoladi
+                # (chunki xato faqat server logida ko'rinadi, botda ko'rinmaydi).
+                # Shuning uchun matnni albatta xavfsizlashtiramiz (escape qilamiz).
+                safe_terms = html.escape(raw_terms)
+                label = "Kuryer" if role_key == "courier" else "Hamkor"
+                await send_telegram_message(
+                    chat_id,
+                    f"📄 <b>{label} bo'lish shartlari:</b>\n\n{safe_terms}",
+                    reply_markup={"inline_keyboard": [[{"text": "✅ Roziman va davom etaman", "callback_data": f"agree:{role_key}"}]]},
+                )
+                return {"ok": True}
+
+            if data in ("agree:courier", "agree:partner"):
+                role_key = data.split(":")[1]
+                bot_conversation_state[chat_id] = {"awaiting_pin_for": role_key}
+                await send_telegram_message(
+                    chat_id,
+                    "🔐 Endi o'zingiz uchun 4 xonali PIN kod o'ylab toping va shu yerga yozing (masalan: 4271).\n"
+                    "Bu PIN bilan keyinchalik kompyuter yoki telefondan kabinetingizga kirasiz.",
+                )
+                return {"ok": True}
+
+            return {"ok": True}
+        except Exception as e:
+            # DIQQAT: bu yerda xatolikni yutib yubormaymiz — logga to'liq yozamiz
+            # VA foydalanuvchiga ham ko'rinadigan alert chiqaramiz, aks holda
+            # "tugma bosilgani bilan hech narsa bo'lmayapti" degan holat
+            # foydalanuvchi uchun tushunarsiz bo'lib qolaveradi.
+            print(f"[TELEGRAM CALLBACK XATOSI] data={data!r} chat_id={chat_id} xato={e!r}")
+            try:
+                await answer_callback_query(callback_query["id"], text="Xatolik yuz berdi, qaytadan urinib ko'ring.", show_alert=True)
+            except Exception:
+                pass
+            return {"ok": True}
 
     message = update.get("message")
     if not message:
@@ -1847,6 +1891,31 @@ async def telegram_set_webhook(request: Request, owner: User = Depends(require_o
 # bajaradi, chunki uni faqat Telegram'ning o'zi to'g'ri yarata oladi.
 
 shop_router = APIRouter(prefix="/api/shop", tags=["Mijoz Mini App"])
+
+
+@shop_router.get("/promotions")
+async def shop_promotions(db: AsyncSession = Depends(get_db)):
+    """Mini App tepasidagi banner va referal/cashback ma'lumotlarini
+    qaytaradi — bularning barchasi OWNER tomonidan boshqariladi (matn,
+    ko'rinish yoqilgan/o'chirilganligi, banner rasmi va havolasi).
+    Frontend (shop.html) shu manzilni chaqirib, mos joylarni chizadi."""
+    setting = await _get_or_create_setting(db)
+    await db.commit()  # _get_or_create_setting yangi qator yaratgan bo'lishi mumkin
+    return {
+        "banner": {
+            "active": bool(setting.banner_is_active and setting.banner_image_url),
+            "image_url": setting.banner_image_url,
+            "link_url": setting.banner_link_url,
+        },
+        "referral": {
+            "visible": setting.referral_visible,
+            "text": setting.referral_program_text or "",
+        },
+        "cashback": {
+            "visible": setting.cashback_visible,
+            "text": setting.bonus_cashback_text or "",
+        },
+    }
 
 
 def _get_telegram_user_or_403(init_data: str) -> dict:

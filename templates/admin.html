@@ -74,6 +74,8 @@
                 {% if is_owner %}
                 <div class="border-t my-2 dark:border-gray-700"></div>
                 <button onclick="showPage('operatorlar')" data-page-btn="operatorlar" class="nav-btn">🧑‍💼 Operatorlar</button>
+                <button onclick="showPage('shartlar')" data-page-btn="shartlar" class="nav-btn">📄 Shartlar</button>
+                <button onclick="showPage('banner')" data-page-btn="banner" class="nav-btn">🖼️ Banner</button>
                 <button onclick="showPage('moliya')" data-page-btn="moliya" class="nav-btn">💰 Moliya</button>
                 <button onclick="showPage('xavfzone')" data-page-btn="xavfzone" class="nav-btn !text-red-600">⚠️ Reset</button>
                 {% endif %}
@@ -92,6 +94,8 @@
                 <option value="dokonlar">🏪 Do'konlar</option>
                 {% if is_owner %}
                 <option value="operatorlar">🧑‍💼 Operatorlar</option>
+                <option value="shartlar">📄 Shartlar</option>
+                <option value="banner">🖼️ Banner</option>
                 <option value="moliya">💰 Moliya</option>
                 <option value="xavfzone">⚠️ Reset</option>
                 {% endif %}
@@ -974,6 +978,10 @@
             <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
             <form action="/admin/settings/referral" method="POST" class="space-y-3">
                 <textarea name="referral_program_text" rows="10" placeholder="Masalan: Do'stingizni taklif qiling, u birinchi buyurtma bersa - ikkalangiz ham 10 000 so'm bonus olasiz..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else '' }}</textarea>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="referral_visible" value="true" {% if not system_setting or system_setting.referral_visible %}checked{% endif %}>
+                    Mijozlarga Mini App'da ko'rsatilsin
+                </label>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
             </form>
             {% else %}
@@ -991,6 +999,10 @@
             <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
             <form action="/admin/settings/cashback" method="POST" class="space-y-3">
                 <textarea name="bonus_cashback_text" rows="10" placeholder="Masalan: Har bir buyurtmadan 2% cashback qaytariladi, ballarni keyingi buyurtmada ishlatish mumkin..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else '' }}</textarea>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="cashback_visible" value="true" {% if not system_setting or system_setting.cashback_visible %}checked{% endif %}>
+                    Mijozlarga Mini App'da ko'rsatilsin
+                </label>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
             </form>
             {% else %}
@@ -999,6 +1011,34 @@
             {% endif %}
         </div>
         </section>
+
+        {% if is_owner %}
+        <!-- MINI APP BANNERI (faqat OWNER) -->
+        <section class="app-page" data-page="banner" style="display:none;">
+        <div class="card-bg bg-white p-6 rounded-xl shadow-md max-w-lg">
+            <h2 class="theme-title text-lg font-bold mb-2 text-indigo-700">🖼️ Mini App Reklama Banneri</h2>
+            <p class="text-xs text-gray-500 mb-4">Mijoz Mini App'ni ochganda, eng tepada shu rasm chiqadi (bosilsa, pastdagi havolaga o'tadi).</p>
+            {% if system_setting and system_setting.banner_image_url %}
+            <img src="{{ system_setting.banner_image_url }}" class="w-full h-32 object-cover rounded-lg mb-3 border">
+            {% endif %}
+            <form action="/admin/settings/banner" method="POST" enctype="multipart/form-data" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium">Yangi rasm (bo'sh qoldirsangiz, eskisi qoladi)</label>
+                    <input type="file" name="banner_image" accept="image/png,image/jpeg,image/webp" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium">Bosilganda ochiladigan havola (ixtiyoriy)</label>
+                    <input type="text" name="banner_link_url" value="{{ system_setting.banner_link_url if system_setting and system_setting.banner_link_url else '' }}" placeholder="https://t.me/..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                </div>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="banner_is_active" value="true" {% if system_setting and system_setting.banner_is_active %}checked{% endif %}>
+                    Banner faol (Mini App'da ko'rsatilsin)
+                </label>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
+            </form>
+        </div>
+        </section>
+        {% endif %}
 
         {% if is_owner %}
         <!-- SHARTLAR (faqat OWNER) -->

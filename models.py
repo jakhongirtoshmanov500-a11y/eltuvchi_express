@@ -211,6 +211,17 @@ class SystemSetting(Base):
     referral_program_text = Column(Text, nullable=True)
     bonus_cashback_text = Column(Text, nullable=True)
 
+    # Referal/Bonus dasturini mijozga ko'rsatish yoki yashirish — matn tayyor
+    # bo'lmasa yoki dastur vaqtincha to'xtatilgan bo'lsa, buni yoqmasdan turib
+    # yashirish uchun (matnni o'chirmasdan).
+    referral_visible = Column(Boolean, default=True)
+    cashback_visible = Column(Boolean, default=True)
+
+    # Mini App tepasidagi reklama banneri — faqat OWNER boshqaradi
+    banner_image_url = Column(String, nullable=True)
+    banner_link_url = Column(String, nullable=True)
+    banner_is_active = Column(Boolean, default=False)
+
     # Har bir rol uchun alohida shartlar — odam shu rolni tanlaganda
     # birinchi bo'lib shu matn ko'rsatiladi, "Roziman" bosmasa davom etolmaydi.
     courier_terms = Column(Text, nullable=True)
