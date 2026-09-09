@@ -13,7 +13,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text, extract
+from sqlalchemy import select, func, text, extract, inspect as sa_inspect
+from sqlalchemy.schema import CreateColumn
 from sqlalchemy.orm import selectinload
 
 from database import engine, Base, get_db, AsyncSessionLocal
@@ -112,19 +113,72 @@ async def seed_default_data():
 
 
 # ==================== STARTUP / SHUTDOWN ====================
+async def auto_sync_missing_columns(conn):
+    """
+    Modeldagi (models.py) har bir ustunni bazadagi haqiqiy holat bilan
+    solishtiradi, va YETISHMAYOTGANLARINI O'ZI ALTER TABLE bilan qo'shadi.
+
+    NEGA BU KERAK: Alembic — to'g'ri, professional yechim, lekin Render
+    kabi joyda uni sozlash (Start Command, versiyalar tarixi) tez-tez
+    chalkashlikka olib kelmoqda. Bu funksiya esa — "hech qachon
+    unutilmaydigan, qo'lda hech narsa qilish shart bo'lmagan" ehtiyot
+    chorasi: HAR safar server ishga tushganda o'zi tekshiradi va
+    tuzatadi, Alembic ishlatilsa ham, ishlatilmasa ham xavfsiz.
+
+    Ishlash tartibi:
+    1. Bazadagi haqiqiy jadval/ustunlar ro'yxatini o'qiydi (inspector).
+    2. models.py'dagi har bir jadval/ustunni shu bilan solishtiradi.
+    3. Yo'q ustunni topsa — ALTER TABLE ... ADD COLUMN ... buyrug'ini
+       AVTOMATIK generatsiya qilib, ishga tushiradi.
+    4. Bitta ustunda xatolik bo'lsa ham, qolganlariga to'sqinlik qilmaydi
+       (har biri alohida try/except ichida).
+    """
+    def _sync_columns(sync_conn):
+        inspector = sa_inspect(sync_conn)
+        existing_tables = set(inspector.get_table_names())
+
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                # Bu jadval umuman yo'q — create_all allaqachon yaratadi, o'tkazib yuboramiz
+                continue
+
+            existing_columns = {col["name"] for col in inspector.get_columns(table.name)}
+
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+
+                try:
+                    # Ustunning SQL ta'rifini (nomi, turi) avtomatik generatsiya qilamiz —
+                    # bu yerda hech qanday qo'lda yozilgan ustun nomlari yo'q, shuning
+                    # uchun kelajakda qo'shiladigan HAR QANDAY yangi ustun ham
+                    # avtomatik qo'shiladi.
+                    col_ddl = str(CreateColumn(column).compile(dialect=sync_conn.dialect))
+                    # Mavjud (bo'sh bo'lmagan) jadvalga ustun qo'shganda, agar u
+                    # "NOT NULL" bo'lsa-yu standart qiymati bo'lmasa, Postgres xato
+                    # beradi — shuning uchun xavfsizlik uchun har doim NULLABLE
+                    # sifatida qo'shamiz (dastur darajasidagi default qiymatlar
+                    # baribir keyingi yozuvlarda ishlaydi).
+                    col_ddl_nullable = col_ddl.replace(" NOT NULL", "")
+                    ddl_statement = f'ALTER TABLE "{table.name}" ADD COLUMN {col_ddl_nullable}'
+                    sync_conn.execute(text(ddl_statement))
+                    sync_conn.commit()
+                    print(f"[AUTO-MIGRATE] Qo'shildi: {table.name}.{column.name}")
+                except Exception as e:
+                    print(f"[AUTO-MIGRATE OGOHLANTIRISH] {table.name}.{column.name} qo'shilmadi: {e}")
+
+    await conn.run_sync(_sync_columns)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        # DIQQAT: bazaning sxemasini (jadval/ustunlar) boshqarish endi Alembic
-        # zimmasida (qarang: alembic/, va Render'dagi Start Command).
-        # create_all bu yerda faqat BIRINCHI marta, hali umuman bo'sh bazaga
-        # ishga tushirilganda foydali — u YANGI jadvallarni yaratadi, lekin
-        # mavjud jadvalga yangi ustun qo'sha olmaydi. Shu sababli, modelga
-        # o'zgartirish kiritilganda, endi HAR DOIM Alembic migratsiyasi
-        # yozilishi va ishga tushirilishi kerak (README'dagi yo'riqnomaga qarang).
+        # 1-qadam: umuman yo'q jadvallarni yaratish (yangi model qo'shilganda)
         await conn.run_sync(Base.metadata.create_all)
+        # 2-qadam: mavjud jadvallardagi yetishmayotgan ustunlarni avtomatik qo'shish
+        await auto_sync_missing_columns(conn)
 
-    print("PostgreSQL jadvallari tayyor (sxema Alembic orqali boshqariladi).")
+    print("PostgreSQL jadvallari tayyor va sinxronlashtirildi.")
     await seed_default_data()
     yield
     # Server to'xtatilganda Telegram uchun ochilgan HTTP ulanishlarni yopamiz
