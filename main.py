@@ -162,7 +162,13 @@ async def auto_sync_missing_columns(conn):
                     col_ddl_nullable = col_ddl.replace(" NOT NULL", "")
                     ddl_statement = f'ALTER TABLE "{table.name}" ADD COLUMN {col_ddl_nullable}'
                     sync_conn.execute(text(ddl_statement))
-                    sync_conn.commit()
+                    # DIQQAT: bu yerda sync_conn.commit() CHAQIRILMAYDI — chunki
+                    # bu funksiya tashqi "async with engine.begin() as conn:"
+                    # tranzaksiyasi ICHIDA ishlaydi, u o'zi avtomatik commit
+                    # qiladi. Qo'lda commit() chaqirish tashqi tranzaksiyani
+                    # muddatidan oldin "yopib" qo'yib, undan keyingi barcha
+                    # amallarni "closed transaction" xatosi bilan buzardi —
+                    # aynan shu xato oldingi versiyada yuz bergan edi.
                     print(f"[AUTO-MIGRATE] Qo'shildi: {table.name}.{column.name}")
                 except Exception as e:
                     print(f"[AUTO-MIGRATE OGOHLANTIRISH] {table.name}.{column.name} qo'shilmadi: {e}")
