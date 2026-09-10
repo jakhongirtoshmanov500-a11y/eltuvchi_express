@@ -23,6 +23,7 @@ from telegram_bot import (
     contact_request_keyboard,
     normalize_phone,
     set_telegram_webhook,
+    get_telegram_webhook_info,
     validate_telegram_init_data,
     answer_callback_query,
     close_telegram_bot_client,
@@ -1740,12 +1741,19 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
     bosish (callback_query) va PIN kiritish (oddiy matn) qayta ishlanadi."""
     update = await request.json()
 
+    # DIQQAT (VAQTINCHALIK DEBUG): Telegram'dan har bir kelgan update'ni
+    # to'liq ko'rish uchun. Muammo tuzatilgach, buni olib tashlash mumkin —
+    # hozircha "tugma bosilganda hech narsa bo'lmayapti" degan xatoni
+    # aniqlashtirish uchun eng ishonchli yo'l shu.
+    print(f"[TELEGRAM UPDATE KELDI] {update}")
+
     # ---- TUGMA BOSILGANDA (masalan "Kuryer bo'lish", "Roziman") ----
     callback_query = update.get("callback_query")
     if callback_query:
         await answer_callback_query(callback_query["id"])
         chat_id = callback_query["message"]["chat"]["id"]
         data = callback_query.get("data", "")
+        print(f"[TELEGRAM CALLBACK] chat_id={chat_id} data={data!r}")
 
         try:
             user_result = await db.execute(select(User).where(User.telegram_id == str(chat_id)))
@@ -1944,6 +1952,14 @@ async def telegram_set_webhook(request: Request, owner: User = Depends(require_o
     return {"webhook_url": webhook_url, "telegram_response": result}
 
 
+@app.get("/telegram/webhook-info")
+async def telegram_webhook_info(owner: User = Depends(require_owner)):
+    """Diagnostika uchun: hozirgi webhook sozlamasi qanday ekanini
+    ko'rsatadi — xususan 'allowed_updates' ichida 'callback_query'
+    borligini shu yerdan TEKSHIRISH mumkin (taxmin qilmasdan)."""
+    return await get_telegram_webhook_info()
+
+
 # ==================== 11. MIJOZ MINI APP (Telegram WebApp) ====================
 # DIQQAT: bu yerdagi barcha endpointlar login/parolsiz — chunki mijoz admin
 # emas. Buning o'rniga, HAR BIR so'rovda Telegram'ning initData'si
@@ -2015,6 +2031,14 @@ class ShopOrderBody(BaseModel):
     promo_code: Optional[str] = None
     location: Optional[dict] = None
     use_cashback: Optional[bool] = None
+
+
+@app.get("/health")
+async def health_check():
+    """Render (yoki tashqi monitoring xizmati) serverning ishlab
+    turganini tekshirishi uchun. Hech qanday bazaga ulanmaydi — shunchaki
+    'server jarayoni tirik' degan tez javob."""
+    return {"status": "ok"}
 
 
 @app.get("/shop", response_class=HTMLResponse)

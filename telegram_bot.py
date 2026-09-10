@@ -101,17 +101,42 @@ def normalize_phone(raw_phone: str) -> str:
     return f"+{digits}"
 
 
+async def get_telegram_webhook_info() -> dict:
+    """Hozirgi webhook sozlamasini Telegram'dan so'raydi — shu orqali
+    'allowed_updates ichida callback_query bormi' kabi savollarga
+    ishonchli javob olish mumkin (taxmin qilish shart emas)."""
+    if not TELEGRAM_API_BASE:
+        return {"ok": False, "error": "TELEGRAM_BOT_TOKEN sozlanmagan"}
+    try:
+        resp = await http_client.get(f"{TELEGRAM_API_BASE}/getWebhookInfo")
+        return resp.json()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 async def set_telegram_webhook(webhook_url: str) -> dict:
     """
     FastAPI server ishga tushganda Telegram Webhook'ni avtomatik sozlashi uchun.
     Ilova doimiy rejimda uzilishlarsiz ishlashini kafolatlaydi.
+
+    DIQQAT: allowed_updates ANIQ ko'rsatilishi SHART. Agar bu parametr
+    berilmasa, Telegram AVVALGI sozlamani saqlab qoladi (hatto shu funksiya
+    qayta chaqirilsa ham!) — ya'ni eski kod versiyasida webhook faqat
+    oddiy xabarlar ("message") uchun sozlangan bo'lsa, tugma bosish
+    ("callback_query") hech qachon serverga umuman yetib kelmay qoladi,
+    garchi qolgan hamma narsa to'g'ri ishlasa ham. Shuning uchun bu yerda
+    kerakli barcha turlarni har safar ANIQ qayta yozamiz.
     """
     if not TELEGRAM_API_BASE:
         return {"ok": False, "error": "TELEGRAM_BOT_TOKEN sozlanmagan"}
     try:
         resp = await http_client.post(
-            f"{TELEGRAM_API_BASE}/setWebhook", 
-            json={"url": webhook_url, "drop_pending_updates": False}
+            f"{TELEGRAM_API_BASE}/setWebhook",
+            json={
+                "url": webhook_url,
+                "drop_pending_updates": False,
+                "allowed_updates": ["message", "callback_query"],
+            }
         )
         return resp.json()
     except Exception as e:
