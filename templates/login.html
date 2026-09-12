@@ -13,7 +13,11 @@
         if (tg) { tg.ready(); tg.expand(); }
     </script>
 
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+    <div id="auto-login-status" class="hidden text-center text-sm text-gray-500 mb-4">
+        🔄 Telegram orqali avtomatik kirilmoqda...
+    </div>
+
+    <div id="login-form-wrapper" class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
         <div class="flex flex-col items-center mb-6">
             <img src="/static/images/logo.png" alt="Eltuvchi Express" class="h-16 w-16 object-contain mb-2" onerror="this.style.display='none'">
             <h1 class="text-xl font-bold text-indigo-700">Eltuvchi Express</h1>
@@ -27,6 +31,7 @@
         {% endif %}
 
         <form action="/login" method="POST" class="space-y-4">
+            <input type="hidden" name="next" value="{{ next_url }}">
             <div>
                 <label class="block text-sm font-medium text-gray-700">Telefon raqami</label>
                 <input type="text" name="phone_number" placeholder="+998901234567" class="w-full mt-1 p-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" required autofocus>
@@ -41,6 +46,39 @@
             </button>
         </form>
     </div>
+
+    <script>
+        // Agar sahifa Telegram Mini App ichida ochilgan bo'lsa va Telegram
+        // bizga foydalanuvchi identifikatsiyasini (initData) bergan bo'lsa —
+        // PIN so'ramasdan, avtomatik kirishga urinamiz. Muvaffaqiyatsiz
+        // bo'lsa (masalan hali botda ro'yxatdan o'tmagan), oddiy PIN
+        // formasi ko'rinishda qolaveradi — hech narsa buzilmaydi.
+        (async () => {
+            if (!tg || !tg.initData) return;
+
+            document.getElementById('login-form-wrapper').classList.add('hidden');
+            document.getElementById('auto-login-status').classList.remove('hidden');
+
+            try {
+                const res = await fetch('/telegram-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ init_data: tg.initData, next: "{{ next_url }}" }),
+                });
+                const data = await res.json();
+                if (data.ok && data.redirect) {
+                    window.location.href = data.redirect;
+                    return;
+                }
+            } catch (e) {
+                console.error('Avtomatik kirish xatosi:', e);
+            }
+
+            // Avtomatik kirish ishlamadi — oddiy formani qayta ko'rsatamiz
+            document.getElementById('auto-login-status').classList.add('hidden');
+            document.getElementById('login-form-wrapper').classList.remove('hidden');
+        })();
+    </script>
 
 </body>
 </html>

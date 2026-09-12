@@ -1,0 +1,15 @@
+# Maxfiy kalitlar va parollar (AI ko'rmasligi kerak)
+.env
+.env.*
+*.pem
+*.key
+
+# Og'ir va keraksiz papkalar
+node_modules/
+.venv/
+venv/
+__pycache__/
+.git/
+dist/
+build/
+.next/

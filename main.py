@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter, UploadFile, File
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -44,6 +44,10 @@ from models import (
     TransactionType,
     WithdrawalRequest,
     WithdrawalStatus,
+    Banner,
+    PromoCode,
+    PromoCodeUsage,
+    FavoriteProduct,
 )
 from auth import (
     hash_password,
@@ -204,7 +208,56 @@ if not SESSION_SECRET_KEY:
     import secrets as _secrets
     SESSION_SECRET_KEY = _secrets.token_hex(32)
 
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="lax")
+
+
+# ==================== CSRF HIMOYASI ====================
+# DIQQAT: bu yerda "token har bir formaga qo'shilsin" usuli emas,
+# "Origin/Referer tekshiruvi" usuli tanlangan — chunki bizda 50+ dan
+# ortiq HTML forma bor (admin/hamkor/kuryer panellarida), va ularning
+# HAMMASINI birma-bir o'zgartirish xato qilish ehtimolini oshiradi.
+#
+# Bu usul esa: har bir "xavfli" so'rov (POST/PUT/PATCH/DELETE) qayerdan
+# kelganini (brauzer avtomatik yuboradigan Origin/Referer sarlavhasi
+# orqali) tekshiradi — agar so'rov BIZNING saytimizdan kelmagan bo'lsa
+# (masalan, boshqa saytdagi yashirin forma orqali soxta so'rov yuborishga
+# urinilsa), rad etiladi. Bu — zamonaviy brauzerlarda ishonchli va keng
+# qo'llaniladigan himoya, va HECH QANDAY formaga o'zgartirish shart emas.
+CSRF_EXEMPT_PREFIXES = (
+    "/telegram/webhook",   # Telegram serveridan keladi — Origin sarlavhasi yo'q, lekin
+                            # bu yo'l allaqachon boshqa yo'l bilan himoyalangan (faqat
+                            # Telegram token orqali topiladigan maxfiy URL)
+    "/api/shop/",           # Mini App so'rovlari — Telegram initData (HMAC imzo) orqali
+                            # ALLAQACHON qattiq tasdiqlanadi, CSRF bu yerda ortiqcha
+)
+
+
+@app.middleware("http")
+async def csrf_origin_check_middleware(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        path = request.url.path
+        if not any(path.startswith(p) for p in CSRF_EXEMPT_PREFIXES):
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                from urllib.parse import urlparse
+                origin_host = urlparse(origin).hostname
+                request_host = request.url.hostname
+                if origin_host != request_host:
+                    print(f"[CSRF RAD ETILDI] path={path} origin_host={origin_host} kutilgan={request_host}")
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "So'rov manbasi tasdiqlanmadi (CSRF himoyasi)."},
+                    )
+            # DIQQAT: Origin/Referer sarlavhasi UMUMAN yo'q bo'lsa — bu yerda
+            # ataylab RAD ETMAYMIZ. Sabab: haqiqiy CSRF hujumida brauzer har
+            # doim Origin sarlavhasini yuboradi (buni tajovuzkor yashira
+            # olmaydi), shuning uchun yuqoridagi "mos kelmasa rad etish"
+            # tekshiruvi haqiqiy hujumni allaqachon ushlaydi. Sarlavha
+            # umuman yo'qligi ko'proq: eski brauzer, maxfiylik sozlamasi,
+            # yoki API test vositasi (masalan curl/Postman) bo'lishi mumkin
+            # — buni ham rad etish, real foydalanuvchilarni bexosdan
+            # tizimdan chiqarib qo'yish xavfini oshiradi.
+    return await call_next(request)
 
 
 @app.exception_handler(RedirectToLogin)
@@ -256,8 +309,66 @@ finance_router = APIRouter(
 
 # ==================== 0. LOGIN / LOGOUT ====================
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse(request=request, name="login.html", context={"error": None})
+async def login_page(request: Request, next: str = "/admin"):
+    return templates.TemplateResponse(request=request, name="login.html", context={"error": None, "next_url": next})
+
+
+class TelegramLoginBody(BaseModel):
+    init_data: str
+    next: Optional[str] = None
+
+
+@app.post("/telegram-login")
+async def telegram_login(body: TelegramLoginBody, request: Request, db: AsyncSession = Depends(get_db)):
+    """Mini App orqali (Telegram WebView ichida) ochilganda, PIN qayta
+    so'ralmasdan avtomatik kirish uchun. login.html sahifasi ochilganda,
+    agar Telegram.WebApp mavjud bo'lsa, shu manzilga initData yuboradi —
+    muvaffaqiyatli bo'lsa, foydalanuvchi PIN kiritishning hojati
+    bo'lmasdan to'g'ridan-to'g'ri o'z kabinetiga kiradi.
+
+    XAVFSIZLIK: bu yerda parol umuman tekshirilmaydi — buning o'rniga
+    Telegram'ning o'zi imzolagan initData tekshiriladi (HMAC), bu esa
+    "faqat Telegram orqali, faqat shu odamning o'zi" ekanini kafolatlaydi
+    xuddi PIN kabi ishonchli, chunki uni soxtalashtirib bo'lmaydi."""
+    tg_user = validate_telegram_init_data(body.init_data)
+    if not tg_user:
+        return JSONResponse(status_code=403, content={"ok": False, "detail": "Telegram tasdiqlanmadi"})
+
+    telegram_id = str(tg_user["id"])
+    result = await db.execute(
+        select(User)
+        .where(User.telegram_id == telegram_id)
+        .options(selectinload(User.courier_profile), selectinload(User.partner_profile))
+    )
+    user = result.scalars().first()
+
+    if not user or not user.is_active:
+        return JSONResponse(status_code=404, content={"ok": False, "detail": "Foydalanuvchi topilmadi"})
+
+    can_admin = user.role in (UserRole.OWNER, UserRole.ADMIN)
+    can_partner = user.partner_profile is not None
+    can_courier = user.courier_profile is not None
+
+    if not (can_admin or can_partner or can_courier):
+        return JSONResponse(status_code=403, content={"ok": False, "detail": "Sizga tegishli panel topilmadi"})
+
+    request.session["user_id"] = user.id
+
+    # Agar "next" so'ralgan bo'lsa va foydalanuvchi haqiqatan shu panelga
+    # kira olsa — o'shani ishlatamiz; aks holda mos panelni o'zimiz tanlaymiz.
+    redirect_to = "/admin"
+    if body.next == "/partner" and can_partner:
+        redirect_to = "/partner"
+    elif body.next == "/courier" and can_courier:
+        redirect_to = "/courier"
+    elif can_admin:
+        redirect_to = "/admin"
+    elif can_partner:
+        redirect_to = "/partner"
+    elif can_courier:
+        redirect_to = "/courier"
+
+    return {"ok": True, "redirect": redirect_to}
 
 
 @app.post("/login")
@@ -529,6 +640,9 @@ async def admin_dashboard(
     # (partner.commission_rate), shuning uchun buni SQL darajasida bitta
     # formula bilan hisoblab bo'lmaydi — har bir buyurtmani alohida ko'rib,
     # o'sha buyurtmaning o'z hamkoriga tegishli foizi bilan hisoblaymiz.
+    banners_result = await db.execute(select(Banner).order_by(Banner.display_order, Banner.id))
+    banners = banners_result.scalars().all()
+
     analytics = None
     if is_owner:
         month_start = today.replace(day=1)
@@ -613,6 +727,7 @@ async def admin_dashboard(
             "recent_transactions": recent_transactions,
             "pending_withdrawals": pending_withdrawals,
             "birthday_clients_today": birthday_clients_today,
+            "banners": banners,
             "analytics": analytics,
         },
     )
@@ -666,17 +781,22 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
-async def save_uploaded_image(file: UploadFile, subfolder: str) -> str:
-    """Yuklangan rasmni tekshirib, xavfsiz nom bilan saqlaydi, va uni
-    brauzerdan ochish mumkin bo'lgan URL qilib qaytaradi.
+EXT_TO_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
-    Xavfsizlik choralari:
-    - Fayl kengaytmasi ro'yxatdagilardan biri bo'lishi shart
-    - Hajmi 5 MB dan oshmasligi kerak
-    - Fayl nomi FOYDALANUVCHI kiritganidan emas, tasodifiy (uuid) qilib
-      yaratiladi — aks holda kimdir ataylab xavfli nom (masalan
-      "../../main.py") yuborib, serverdagi boshqa faylni ustidan
-      yozib yuborishi mumkin edi (path traversal hujumi).
+
+async def process_uploaded_image(file: UploadFile) -> tuple[bytes, str]:
+    """Yuklangan rasmni tekshiradi va (bytes, mime_type) qilib qaytaradi —
+    DISKKA EMAS, chaqiruvchi funksiya buni bazaga yozadi.
+
+    DIQQAT — MUHIM O'ZGARISH: avval rasmlar serverning "static/uploads/"
+    papkasiga yozilardi. Bu Render kabi hosting'larda muammo edi: server
+    qayta ishga tushganda (har bir yangi deploy, yoki bepul tarifda
+    "uyquga ketib-uyg'onish") konteyner NOLDAN qayta yaratiladi va
+    runtime'da yozilgan fayllar (yuklangan rasmlar) BUTUNLAY YO'QOLIB
+    QOLARDI. Shuning uchun endi rasm baytlari to'g'ridan-to'g'ri bazaga
+    (Postgres — bu doim saqlanadi) yoziladi.
+
+    Xavfsizlik choralari avvalgidek: ruxsat etilgan formatlar, hajm chegarasi.
     """
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
@@ -688,15 +808,33 @@ async def save_uploaded_image(file: UploadFile, subfolder: str) -> str:
     if len(contents) > MAX_IMAGE_SIZE_BYTES:
         raise HTTPException(status_code=400, detail="Rasm hajmi 5 MB dan oshmasligi kerak")
 
-    upload_dir = os.path.join("static", "uploads", subfolder)
-    os.makedirs(upload_dir, exist_ok=True)
+    return contents, EXT_TO_MIME[ext]
 
-    safe_filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = os.path.join(upload_dir, safe_filename)
-    with open(filepath, "wb") as f:
-        f.write(contents)
 
-    return f"/static/uploads/{subfolder}/{safe_filename}"
+@app.get("/media/product/{product_id}")
+async def media_product_image(product_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+    if not product or not product.image_data:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    return Response(
+        content=product.image_data,
+        media_type=product.image_mime or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/media/banner/{banner_id}")
+async def media_banner_image(banner_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Banner).where(Banner.id == banner_id))
+    banner = result.scalars().first()
+    if not banner or not banner.image_data:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    return Response(
+        content=banner.image_data,
+        media_type=banner.image_mime or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def validate_pin(pin: str) -> None:
@@ -855,18 +993,54 @@ async def update_cashback_setting(
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@settings_router.post("/banner")
-async def update_banner_setting(
-    banner_link_url: str = Form(""),
-    banner_is_active: bool = Form(False),
+@app.post("/admin/banners/create")
+async def create_banner(
+    title: str = Form(""),
+    text_content: str = Form(""),
+    link_url: str = Form(""),
+    display_order: int = Form(0),
     banner_image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
+    owner: User = Depends(require_owner),
 ):
-    setting = await _get_or_create_setting(db)
-    setting.banner_link_url = banner_link_url
-    setting.banner_is_active = banner_is_active
+    image_data, image_mime = None, None
     if banner_image and banner_image.filename:
-        setting.banner_image_url = await save_uploaded_image(banner_image, "banners")
+        image_data, image_mime = await process_uploaded_image(banner_image)
+
+    if not image_data and not text_content.strip():
+        raise HTTPException(status_code=400, detail="Banner uchun rasm yoki matn kiritilishi shart")
+
+    db.add(Banner(
+        title=title or None,
+        text_content=text_content or None,
+        link_url=link_url or None,
+        display_order=display_order,
+        image_data=image_data,
+        image_mime=image_mime,
+        is_active=True,
+    ))
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/banners/{banner_id}/toggle")
+async def toggle_banner(banner_id: int, db: AsyncSession = Depends(get_db), owner: User = Depends(require_owner)):
+    result = await db.execute(select(Banner).where(Banner.id == banner_id))
+    banner = result.scalars().first()
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner topilmadi")
+    banner.is_active = not banner.is_active
+    await db.commit()
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/banners/{banner_id}/delete")
+async def delete_banner(banner_id: int, db: AsyncSession = Depends(get_db), owner: User = Depends(require_owner)):
+    result = await db.execute(select(Banner).where(Banner.id == banner_id))
+    banner = result.scalars().first()
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner topilmadi")
+    await db.delete(banner)
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1058,6 +1232,7 @@ async def update_order_status_and_courier(
 # toggle — operator ham qila oladi (router darajasidagi get_current_admin_user yetarli).
 @partners_router.post("/create")
 async def create_partner(
+    request: Request,
     brand_name: str = Form(...),
     category: str = Form(...),
     address: str = Form(...),
@@ -1090,11 +1265,28 @@ async def create_partner(
     # bo'lgan alohida akkaunt (User, role=PARTNER) yaratamiz va shu
     # do'konga bog'laymiz. Kiritilmasa — do'konni faqat siz boshqarasiz,
     # bu ham to'liq to'g'ri variant.
+    partner_user = None
     if login_phone and login_password:
         partner_user = await find_or_create_login_user(db, login_phone, login_password, brand_name, city_id)
         new_partner.user_id = partner_user.id
 
     await db.commit()
+
+    # Agar bu odam avval botga /start bosib, Telegram'ga ulangan bo'lsa —
+    # endi unga to'g'ridan-to'g'ri "kabinetni ochish" tugmasini yuboramiz,
+    # shunda u qayta PIN kiritmasdan, Mini App orqali kirib ketaveradi.
+    if partner_user and partner_user.telegram_id:
+        try:
+            partner_url = str(request.base_url).rstrip("/") + "/login?next=/partner"
+            await send_telegram_message(
+                partner_user.telegram_id,
+                f"🎉 <b>{brand_name}</b> do'koningiz tizimga to'liq qo'shildi!\n\n"
+                f"Quyidagi tugma orqali kabinetingizni oching:",
+                reply_markup={"inline_keyboard": [[{"text": "🏪 Hamkor kabinetini ochish", "web_app": {"url": partner_url}}]]},
+            )
+        except Exception as e:
+            print(f"Hamkorga Telegram xabari yuborilmadi: {e}")
+
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -1206,9 +1398,9 @@ async def create_product(
     if not partner_query.scalars().first():
         raise HTTPException(status_code=404, detail="Bunday do'kon topilmadi")
 
-    image_url = None
+    image_data, image_mime = None, None
     if image and image.filename:
-        image_url = await save_uploaded_image(image, "products")
+        image_data, image_mime = await process_uploaded_image(image)
 
     new_product = Product(
         partner_id=partner_id,
@@ -1216,10 +1408,14 @@ async def create_product(
         price=price,
         description=description,
         category=category,
-        image_url=image_url,
+        image_data=image_data,
+        image_mime=image_mime,
         is_available=True,
     )
     db.add(new_product)
+    await db.flush()
+    if image_data:
+        new_product.image_url = f"/media/product/{new_product.id}"
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1250,7 +1446,10 @@ async def update_product(
     # qoldirsa, eski rasm o'zgarmasdan qoladi (har safar qayta yuklashga
     # majburlamaslik uchun).
     if image and image.filename:
-        product.image_url = await save_uploaded_image(image, "products")
+        image_data, image_mime = await process_uploaded_image(image)
+        product.image_data = image_data
+        product.image_mime = image_mime
+        product.image_url = f"/media/product/{product.id}"
 
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
@@ -1861,6 +2060,7 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 terms_accepted_at=datetime.utcnow(),
             ))
             await db.commit()
+            courier_login_url = str(request.base_url).rstrip("/") + "/login?next=/courier"
             await send_telegram_message(
                 chat_id,
                 "🎉 Tabriklaymiz — endi siz kuryersiz!\n\n"
@@ -1868,6 +2068,7 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 "(kompyuter yoki telefon) kirishingiz mumkin.\n\n"
                 "Sizga qaysi shaharda ishlashingiz OWNER/operator tomonidan tayinlanadi — "
                 "agar hali tayinlanmagan bo'lsa, ular bilan bog'laning.",
+                reply_markup={"inline_keyboard": [[{"text": "🛵 Kuryer kabinetini ochish", "web_app": {"url": courier_login_url}}]]},
             )
         else:
             # Hamkor (do'kon) bo'lish — bunga do'kon nomi, manzili, shahri
@@ -1971,18 +2172,28 @@ shop_router = APIRouter(prefix="/api/shop", tags=["Mijoz Mini App"])
 
 @shop_router.get("/promotions")
 async def shop_promotions(db: AsyncSession = Depends(get_db)):
-    """Mini App tepasidagi banner va referal/cashback ma'lumotlarini
-    qaytaradi — bularning barchasi OWNER tomonidan boshqariladi (matn,
-    ko'rinish yoqilgan/o'chirilganligi, banner rasmi va havolasi).
+    """Mini App tepasidagi banner(lar) va referal/cashback ma'lumotlarini
+    qaytaradi — bularning barchasi OWNER tomonidan boshqariladi.
     Frontend (shop.html) shu manzilni chaqirib, mos joylarni chizadi."""
     setting = await _get_or_create_setting(db)
     await db.commit()  # _get_or_create_setting yangi qator yaratgan bo'lishi mumkin
+
+    banners_result = await db.execute(
+        select(Banner).where(Banner.is_active == True).order_by(Banner.display_order, Banner.id)
+    )
+    banners = banners_result.scalars().all()
+
     return {
-        "banner": {
-            "active": bool(setting.banner_is_active and setting.banner_image_url),
-            "image_url": setting.banner_image_url,
-            "link_url": setting.banner_link_url,
-        },
+        "banners": [
+            {
+                "id": b.id,
+                "title": b.title,
+                "text": b.text_content,
+                "image_url": f"/media/banner/{b.id}" if b.image_data else None,
+                "link_url": b.link_url,
+            }
+            for b in banners
+        ],
         "referral": {
             "visible": setting.referral_visible,
             "text": setting.referral_program_text or "",
@@ -2008,6 +2219,11 @@ class InitDataBody(BaseModel):
 class SetCityBody(BaseModel):
     init_data: str
     city_id: int
+
+
+class SetBirthdayBody(BaseModel):
+    init_data: str
+    birth_date: str  # "YYYY-MM-DD" ko'rinishida keladi (HTML <input type="date">)
 
 
 class OrderItemBody(BaseModel):
@@ -2088,6 +2304,65 @@ async def shop_set_city(body: SetCityBody, db: AsyncSession = Depends(get_db)):
     client.city_id = body.city_id
     await db.commit()
     return {"ok": True}
+
+
+@shop_router.post("/set-birthday")
+async def shop_set_birthday(body: SetBirthdayBody, db: AsyncSession = Depends(get_db)):
+    """Mijoz Mini App'da tug'ilgan sanasini kiritganda shu yerga keladi.
+    Bu — avval umuman mavjud bo'lmagan endpoint edi, shuning uchun mijoz
+    kiritgan sana hech qayerga saqlanmasdi (admin panelda ko'rinmasdi)."""
+    tg_user = _get_telegram_user_or_403(body.init_data)
+    telegram_id = str(tg_user["id"])
+
+    result = await db.execute(
+        select(User).where(User.telegram_id == telegram_id, User.role == UserRole.CLIENT)
+    )
+    client = result.scalars().first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    try:
+        parsed_date = datetime.strptime(body.birth_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Sana formati noto'g'ri (YYYY-MM-DD kutilgan)")
+
+    client.birth_date = parsed_date
+    await db.commit()
+    return {"ok": True}
+
+
+class ProfileUpdateBody(BaseModel):
+    init_data: str
+    first_name: Optional[str] = None
+    birth_date: Optional[str] = None  # "YYYY-MM-DD"
+
+
+@shop_router.post("/profile/update")
+async def shop_profile_update(body: ProfileUpdateBody, db: AsyncSession = Depends(get_db)):
+    """DIQQAT: shop.html frontend'i aynan shu manzilga (`/profile/update`)
+    so'rov yuboradi — avval bu manzil backendda umuman yo'q edi (faqat
+    alohida `/set-birthday` bor edi, boshqa nom bilan), shuning uchun
+    mijoz ismini yoki tug'ilgan kunini kiritsa ham, hech qayerga
+    saqlanmasdi va admin panelda hech qachon ko'rinmasdi."""
+    tg_user = _get_telegram_user_or_403(body.init_data)
+    telegram_id = str(tg_user["id"])
+
+    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+    client = result.scalars().first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    if body.first_name:
+        client.full_name = body.first_name
+
+    if body.birth_date:
+        try:
+            client.birth_date = datetime.strptime(body.birth_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Sana formati noto'g'ri (YYYY-MM-DD kutilgan)")
+
+    await db.commit()
+    return {"ok": True, "message": "Ma'lumotlar saqlandi!"}
 
 
 @shop_router.get("/partners")
@@ -2288,18 +2563,23 @@ async def partner_create_product(
     current_user: User = Depends(get_current_partner_user),
 ):
     partner = await _get_own_partner(db, current_user)
-    image_url = None
+    image_data, image_mime = None, None
     if image and image.filename:
-        image_url = await save_uploaded_image(image, "products")
-    db.add(Product(
+        image_data, image_mime = await process_uploaded_image(image)
+    new_product = Product(
         partner_id=partner.id,
         name=name,
         price=price,
         description=description,
         category=category,
-        image_url=image_url,
+        image_data=image_data,
+        image_mime=image_mime,
         is_available=True,
-    ))
+    )
+    db.add(new_product)
+    await db.flush()
+    if image_data:
+        new_product.image_url = f"/media/product/{new_product.id}"
     await db.commit()
     return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -2325,7 +2605,10 @@ async def partner_update_product(
     product.description = description
     product.category = category
     if image and image.filename:
-        product.image_url = await save_uploaded_image(image, "products")
+        image_data, image_mime = await process_uploaded_image(image)
+        product.image_data = image_data
+        product.image_mime = image_mime
+        product.image_url = f"/media/product/{product.id}"
     await db.commit()
     return RedirectResponse(url="/partner", status_code=status.HTTP_303_SEE_OTHER)
 
