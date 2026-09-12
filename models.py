@@ -267,16 +267,14 @@ class Transaction(Base):
 
 class WithdrawalRequest(Base):
     """Kuryer yoki hamkorning 'pulimni bermoqchiman/yechib olmoqchiman'
-    so'rovi. Hozircha haqiqiy bank/karta o'tkazmasi AVTOMATIK emas —
-    OWNER buni ko'rib, real hayotda (Click/Payme orqali) pulni jismonan
-    o'tkazadi, keyin shu yerda 'Tasdiqlash' bosadi."""
+    so'rovi."""
     __tablename__ = "withdrawal_requests"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
 
-    amount = Column(Float, nullable=False)
+    amount = Float, nullable=False
     status = Column(Enum(WithdrawalStatus), default=WithdrawalStatus.PENDING)
 
     requested_at = Column(DateTime, default=datetime.utcnow)
@@ -288,15 +286,16 @@ class WithdrawalRequest(Base):
     partner = relationship("PartnerProfile", foreign_keys=[partner_id])
     processed_by = relationship("User", foreign_keys=[processed_by_id])
 
-    class PromoCode(Base):
-     """Mijozlar uchun chegirma promokodlari"""
+
+class PromoCode(Base):
+    """Mijozlar uchun chegirma promokodlari"""
     __tablename__ = "promo_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String, unique=True, index=True, nullable=False)  # Masalan: "SUMMER2026", "PROMO10"
-    discount_percent = Column(Float, nullable=True)  # Foizli chegirma (masalan, 10.0 %)
-    discount_amount = Column(Float, nullable=True)   # Aniq summadagi chegirma (masalan, 15000.0 so'm)
-    max_uses = Column(Integer, default=100)          # Umumiy ishlatilish soni cheklovi
-    used_count = Column(Integer, default=0)          # Necha marta ishlatib bo'lindi
+    code = Column(String, unique=True, index=True, nullable=False)
+    discount_percent = Column(Float, nullable=True)
+    discount_amount = Column(Float, nullable=True)
+    max_uses = Column(Integer, default=100)
+    used_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
