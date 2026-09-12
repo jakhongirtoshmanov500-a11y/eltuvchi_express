@@ -299,3 +299,17 @@ class PromoCode(Base):
     used_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class PromoCodeUsage(Base):
+    """Mijozlar tomonidan promokod ishlatilishi tarixi (qayta ishlatishning oldini olish uchun)"""
+    __tablename__ = "promocode_usages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    used_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    promo_code = relationship("PromoCode")
+    order = relationship("Order")
