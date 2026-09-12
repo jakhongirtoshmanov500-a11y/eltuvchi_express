@@ -191,6 +191,18 @@ class OrderItem(Base):
     product = relationship("Product")
 
 
+class Banner(Base):
+    """Mini App va ilova tepasida ko'rinadigan reklama va aksiya bannerlari"""
+    __tablename__ = "banners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=True)
+    image_url = Column(String, nullable=False)
+    link_url = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class SystemSetting(Base):
     __tablename__ = "system_settings"
 
