@@ -287,3 +287,16 @@ class WithdrawalRequest(Base):
     user = relationship("User", foreign_keys=[user_id])
     partner = relationship("PartnerProfile", foreign_keys=[partner_id])
     processed_by = relationship("User", foreign_keys=[processed_by_id])
+
+    class PromoCode(Base):
+     """Mijozlar uchun chegirma promokodlari"""
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)  # Masalan: "SUMMER2026", "PROMO10"
+    discount_percent = Column(Float, nullable=True)  # Foizli chegirma (masalan, 10.0 %)
+    discount_amount = Column(Float, nullable=True)   # Aniq summadagi chegirma (masalan, 15000.0 so'm)
+    max_uses = Column(Integer, default=100)          # Umumiy ishlatilish soni cheklovi
+    used_count = Column(Integer, default=0)          # Necha marta ishlatib bo'lindi
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
