@@ -274,7 +274,7 @@ class WithdrawalRequest(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True)
 
-    amount = Float, nullable=False
+    amount = Column(Float, nullable=False)
     status = Column(Enum(WithdrawalStatus), default=WithdrawalStatus.PENDING)
 
     requested_at = Column(DateTime, default=datetime.utcnow)
