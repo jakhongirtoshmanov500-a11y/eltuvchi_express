@@ -313,3 +313,45 @@ class PromoCodeUsage(Base):
     user = relationship("User")
     promo_code = relationship("PromoCode")
     order = relationship("Order")
+class FavoriteProduct(Base):
+    """Mijozning sevimli (saralangan) mahsulotlari"""
+    __tablename__ = "favorite_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    product = relationship("Product")
+
+
+class Review(Base):
+    """Buyurtma yoki hamkor haqidagi fikr-mulohazalar (sharh va baho)"""
+    __tablename__ = "reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id", ondelete="CASCADE"), nullable=True)
+    rating = Column(Integer, nullable=False, default=5)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    order = relationship("Order")
+    user = relationship("User")
+    partner = relationship("PartnerProfile")
+
+
+class Notification(Base):
+    """Foydalanuvchilarga yuboriladigan tizim bildirishnomalari"""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
