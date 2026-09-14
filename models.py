@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date, Enum, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -76,6 +76,17 @@ class User(Base):
     # Mijoz o'z kabinetida (keyingi bosqichda) kiritadi, hozircha bo'sh qoladi.
     birth_date = Column(Date, nullable=True)
 
+    # Faqat mijoz (CLIENT) uchun — keshbek balli (buyurtmadan qaytadigan
+    # foizlar shu yerga to'planadi, keyingi buyurtmada ishlatiladi)
+    cashback_balance = Column(Float, default=0.0)
+
+    # Referal tizimi: har bir mijozning o'ziga xos kodi bor (do'stlariga
+    # ulashadi), va agar u kimningdir kodi orqali kelgan bo'lsa, o'sha
+    # odam shu yerda saqlanadi (bonus faqat BIRINCHI buyurtmada beriladi).
+    referral_code = Column(String, unique=True, nullable=True, index=True)
+    referred_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    referral_bonus_given = Column(Boolean, default=False)
+
     # cascade="all, delete-orphan": kuryer/hamkor User o'chirilganda,
     # unga bog'liq profil ham avtomatik o'chadi (aks holda FK xatolik beradi)
     courier_profile = relationship("CourierProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -135,6 +146,14 @@ class Product(Base):
 
     # Rasm va kategoriya — mijoz ilovasida menyu chiroyli va tartibli
     # ko'rinishi uchun (masalan "Ichimliklar", "Pitsalar")
+    # DIQQAT: rasm ENDI serverning vaqtinchalik diskiga emas, to'g'ridan-to'g'ri
+    # shu yerga (bazaga) saqlanadi — sabab: Render kabi hosting'larda server
+    # qayta ishga tushganda (deploy, "uyquga ketish" va h.k.) diskka yozilgan
+    # fayllar YO'QOLIB QOLADI, lekin baza doim saqlanadi. image_url endi
+    # haqiqiy fayl yo'li emas, balki "/media/product/{id}" kabi rasmni
+    # bazadan o'qib beradigan manzilni ko'rsatadi.
+    image_data = Column(LargeBinary, nullable=True)
+    image_mime = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
     category = Column(String, nullable=True, default="Boshqa")
 
@@ -156,6 +175,23 @@ class Order(Base):
 
     # Mijozning maxsus istaklari ("Piyozsiz", "Achchiq bo'lmasin" va h.k.)
     client_comment = Column(Text, nullable=True)
+
+    # "delivery" — yetkazib berish (odatiy), "dine_in" — do'konning o'zida ovqatlanish
+    order_type = Column(String, nullable=False, default="delivery")
+
+    # "cash" (naqd, hozircha yagona to'liq ishlaydigani), "click", "payme"
+    # — oxirgi ikkitasi hozircha faqat "mijoz shuni tanladi" deb yoziladi,
+    # haqiqiy to'lov o'tkazish (merchant integratsiyasi) hali ulanmagan.
+    payment_method = Column(String, nullable=False, default="cash")
+
+    # Ishlatilgan promo-kod va u orqali qancha chegirma qilingani
+    promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=True)
+    discount_amount = Column(Float, default=0.0)
+
+    # Shu buyurtmadan mijozga qancha keshbek qaytarilgani (ballarga qo'shildi)
+    cashback_earned = Column(Float, default=0.0)
+    # Shu buyurtmada mijoz oldingi keshbek ballaridan qancha ishlatgani
+    cashback_used = Column(Float, default=0.0)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -191,18 +227,6 @@ class OrderItem(Base):
     product = relationship("Product")
 
 
-class Banner(Base):
-    """Mini App va ilova tepasida ko'rinadigan reklama va aksiya bannerlari"""
-    __tablename__ = "banners"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=True)
-    image_url = Column(String, nullable=False)
-    link_url = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
 class SystemSetting(Base):
     __tablename__ = "system_settings"
 
@@ -221,6 +245,9 @@ class SystemSetting(Base):
     # barchasini faqat OWNER qo'lda kiritadi/o'zgartiradi.
     birthday_bonus_amount = Column(Float, default=0.0)
     referral_program_text = Column(Text, nullable=True)
+    # Referal orqali kelgan yangi mijoz BIRINCHI buyurtmasini bergach,
+    # ikkalasiga ham (taklif qilgan va taklif qilingan) shuncha keshbek beriladi.
+    referral_bonus_amount = Column(Float, default=0.0)
     bonus_cashback_text = Column(Text, nullable=True)
 
     # Referal/Bonus dasturini mijozga ko'rsatish yoki yashirish — matn tayyor
@@ -228,11 +255,8 @@ class SystemSetting(Base):
     # yashirish uchun (matnni o'chirmasdan).
     referral_visible = Column(Boolean, default=True)
     cashback_visible = Column(Boolean, default=True)
-
-    # Mini App tepasidagi reklama banneri — faqat OWNER boshqaradi
-    banner_image_url = Column(String, nullable=True)
-    banner_link_url = Column(String, nullable=True)
-    banner_is_active = Column(Boolean, default=False)
+    # Har bir buyurtmadan necha foizi keshbek sifatida mijozga qaytarilishi
+    cashback_earn_percent = Column(Float, default=0.0)
 
     # Har bir rol uchun alohida shartlar — odam shu rolni tanlaganda
     # birinchi bo'lib shu matn ko'rsatiladi, "Roziman" bosmasa davom etolmaydi.
@@ -267,7 +291,9 @@ class Transaction(Base):
 
 class WithdrawalRequest(Base):
     """Kuryer yoki hamkorning 'pulimni bermoqchiman/yechib olmoqchiman'
-    so'rovi."""
+    so'rovi. Hozircha haqiqiy bank/karta o'tkazmasi AVTOMATIK emas —
+    OWNER buni ko'rib, real hayotda (Click/Payme orqali) pulni jismonan
+    o'tkazadi, keyin shu yerda 'Tasdiqlash' bosadi."""
     __tablename__ = "withdrawal_requests"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -287,71 +313,64 @@ class WithdrawalRequest(Base):
     processed_by = relationship("User", foreign_keys=[processed_by_id])
 
 
+class Banner(Base):
+    """Mini App tepasidagi reklama bannerlari — bir nechtasi bo'lishi
+    mumkin (masalan, aylanadigan/slayder ko'rinishida), har biri rasmli
+    yoki faqat matnli bo'lishi mumkin. Faqat OWNER boshqaradi."""
+    __tablename__ = "banners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=True)
+    text_content = Column(Text, nullable=True)  # faqat matnli banner uchun (rasmsiz)
+
+    # Rasm ham bazaning o'ziga saqlanadi (disk emas — Render'da fayllar
+    # qayta ishga tushganda yo'qolib qolardi, qarang: Product.image_data)
+    image_data = Column(LargeBinary, nullable=True)
+    image_mime = Column(String, nullable=True)
+
+    link_url = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    display_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PromoCode(Base):
-    """Mijozlar uchun chegirma promokodlari"""
+    """Chegirma kodlari — mijoz buyurtma berayotganda kiritadi."""
     __tablename__ = "promo_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String, unique=True, index=True, nullable=False)
-    discount_percent = Column(Float, nullable=True)
-    discount_amount = Column(Float, nullable=True)
-    max_uses = Column(Integer, default=100)
+    code = Column(String, nullable=False, unique=True, index=True)
+    discount_percent = Column(Float, nullable=True)  # masalan 10.0 = 10%
+    discount_amount = Column(Float, nullable=True)  # yoki qat'iy summa (so'mda)
+    max_uses = Column(Integer, nullable=True)  # bo'sh = cheksiz
     used_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 class PromoCodeUsage(Base):
-    """Mijozlar tomonidan promokod ishlatilishi tarixi (qayta ishlatishning oldini olish uchun)"""
-    __tablename__ = "promocode_usages"
+    """Kim, qachon, qaysi buyurtmada qaysi promo-koddan foydalangani —
+    bitta mijoz bitta kodni bir necha marta ishlatolmasligini nazorat
+    qilish uchun ham kerak."""
+    __tablename__ = "promo_code_usages"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     used_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User")
     promo_code = relationship("PromoCode")
-    order = relationship("Order")
+
+
 class FavoriteProduct(Base):
-    """Mijozning sevimli (saralangan) mahsulotlari"""
+    """Mijozning 'sevimli' deb belgilagan mahsulotlari."""
     __tablename__ = "favorite_products"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User")
     product = relationship("Product")
-
-
-class Review(Base):
-    """Buyurtma yoki hamkor haqidagi fikr-mulohazalar (sharh va baho)"""
-    __tablename__ = "reviews"
-
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    partner_id = Column(Integer, ForeignKey("partner_profiles.id", ondelete="CASCADE"), nullable=True)
-    rating = Column(Integer, nullable=False, default=5)
-    comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    order = relationship("Order")
-    user = relationship("User")
-    partner = relationship("PartnerProfile")
-
-
-class Notification(Base):
-    """Foydalanuvchilarga yuboriladigan tizim bildirishnomalari"""
-    __tablename__ = "notifications"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    title = Column(String, nullable=False)
-    message = Column(Text, nullable=False)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    user = relationship("User")
