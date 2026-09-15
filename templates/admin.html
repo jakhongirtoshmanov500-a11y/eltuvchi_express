@@ -34,6 +34,7 @@
             <img src="/static/images/logo.png" alt="Eltuvchi Express" class="h-9 w-9 object-contain" onerror="this.style.display='none'">
             Eltuvchi Express — Boshqaruv Paneli
         </h1>
+        <div id="live-clock" class="text-xs font-mono bg-white/10 px-3 py-1.5 rounded-lg border border-white/20 hidden md:block"></div>
         <div class="flex items-center gap-4">
             {% if is_owner %}
             <div class="flex items-center gap-1 bg-white/10 p-1.5 rounded-lg border border-white/20 text-xs">
@@ -462,6 +463,7 @@
                             {% if is_owner %}<th class="p-2">Shahar</th>{% endif %}
                             <th class="p-2">Buyurtmalar soni</th>
                             <th class="p-2">Umumiy xarajat</th>
+                            <th class="p-2">Keshbek</th>
                             <th class="p-2 text-center">Holat</th>
                             <th class="p-2 text-center">Amallar</th>
                         </tr>
@@ -474,6 +476,7 @@
                             {% if is_owner %}<td class="p-2 text-xs">{{ client.city.name if client.city else '—' }}</td>{% endif %}
                             <td class="p-2 text-center">{{ order_count }}</td>
                             <td class="p-2 text-xs font-semibold text-green-700">{{ "%.0f"|format(total_spent) }} so'm</td>
+                            <td class="p-2 text-xs font-semibold text-amber-600">{{ "%.0f"|format(client.cashback_balance or 0) }} so'm</td>
                             <td class="p-2 text-center">
                                 <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full {% if client.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
                                     {% if client.is_active %}Faol{% else %}Bloklangan{% endif %}
@@ -489,7 +492,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
+                            <td colspan="8" class="p-3 text-center text-gray-400 text-xs">Hozircha mijozlar yo'q</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -597,7 +600,7 @@
                         <p class="text-sm font-semibold">
                             {% if wd.user %}🛵 {{ wd.user.full_name }}{% elif wd.partner %}🏪 {{ wd.partner.brand_name }}{% endif %}
                         </p>
-                        <p class="text-xs text-gray-400">{{ wd.requested_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                        <p class="text-xs text-gray-400">{{ wd.requested_at|uzb_time('%d.%m.%Y %H:%M') }}</p>
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="font-bold text-indigo-700">{{ "%.0f"|format(wd.amount) }} so'm</span>
@@ -682,7 +685,7 @@
                                 {% if tx.type.value == 'deposit' %}+{% else %}−{% endif %}{{ "%.0f"|format(tx.amount) }}
                             </span>
                         </div>
-                        <p class="text-gray-400">{{ tx.note or '—' }} · {{ tx.created_by.full_name if tx.created_by else '—' }} · {{ tx.created_at.strftime('%d.%m %H:%M') }}</p>
+                        <p class="text-gray-400">{{ tx.note or '—' }} · {{ tx.created_by.full_name if tx.created_by else '—' }} · {{ tx.created_at|uzb_time('%d.%m %H:%M') }}</p>
                     </div>
                     {% else %}
                     <p class="text-xs text-gray-400 text-center">Hozircha tranzaksiya yo'q</p>
@@ -978,6 +981,11 @@
             <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
             <form action="/admin/settings/referral" method="POST" class="space-y-3">
                 <textarea name="referral_program_text" rows="10" placeholder="Masalan: Do'stingizni taklif qiling, u birinchi buyurtma bersa - ikkalangiz ham 10 000 so'm bonus olasiz..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.referral_program_text if system_setting and system_setting.referral_program_text else '' }}</textarea>
+                <div>
+                    <label class="block text-xs font-medium">Bonus summasi (so'm)</label>
+                    <input type="number" name="referral_bonus_amount" value="{{ system_setting.referral_bonus_amount if system_setting else 0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    <p class="text-[11px] text-gray-500 mt-1">Do'sti kodini ishlatib birinchi buyurtma bergan mijozning o'zi, VA taklif qilgan mijoz — ikkalasi ham shuncha keshbek oladi.</p>
+                </div>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="referral_visible" value="true" {% if not system_setting or system_setting.referral_visible %}checked{% endif %}>
                     Mijozlarga Mini App'da ko'rsatilsin
@@ -999,6 +1007,11 @@
             <p class="text-xs text-gray-500 mb-3">Bu matn operatorlarga ham ko'rinadi, lekin faqat siz tahrirlay olasiz.</p>
             <form action="/admin/settings/cashback" method="POST" class="space-y-3">
                 <textarea name="bonus_cashback_text" rows="10" placeholder="Masalan: Har bir buyurtmadan 2% cashback qaytariladi, ballarni keyingi buyurtmada ishlatish mumkin..." class="w-full p-3 border rounded-lg text-sm dark:bg-gray-800">{{ system_setting.bonus_cashback_text if system_setting and system_setting.bonus_cashback_text else '' }}</textarea>
+                <div>
+                    <label class="block text-xs font-medium">Cashback foizi (%)</label>
+                    <input type="number" step="0.1" name="cashback_earn_percent" value="{{ system_setting.cashback_earn_percent if system_setting else 0 }}" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    <p class="text-[11px] text-gray-500 mt-1">Masalan 2.0 — har bir YETKAZILGAN buyurtma summasidan 2%i mijozning keshbek balansiga avtomatik qo'shiladi.</p>
+                </div>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="cashback_visible" value="true" {% if not system_setting or system_setting.cashback_visible %}checked{% endif %}>
                     Mijozlarga Mini App'da ko'rsatilsin
@@ -1013,29 +1026,64 @@
         </section>
 
         {% if is_owner %}
-        <!-- MINI APP BANNERI (faqat OWNER) -->
+        <!-- MINI APP BANNERLARI (faqat OWNER) -->
         <section class="app-page" data-page="banner" style="display:none;">
-        <div class="card-bg bg-white p-6 rounded-xl shadow-md max-w-lg">
-            <h2 class="theme-title text-lg font-bold mb-2 text-indigo-700">🖼️ Mini App Reklama Banneri</h2>
-            <p class="text-xs text-gray-500 mb-4">Mijoz Mini App'ni ochganda, eng tepada shu rasm chiqadi (bosilsa, pastdagi havolaga o'tadi).</p>
-            {% if system_setting and system_setting.banner_image_url %}
-            <img src="{{ system_setting.banner_image_url }}" class="w-full h-32 object-cover rounded-lg mb-3 border">
-            {% endif %}
-            <form action="/admin/settings/banner" method="POST" enctype="multipart/form-data" class="space-y-3">
-                <div>
-                    <label class="block text-xs font-medium">Yangi rasm (bo'sh qoldirsangiz, eskisi qoladi)</label>
-                    <input type="file" name="banner_image" accept="image/png,image/jpeg,image/webp" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1">
+                <h2 class="theme-title text-lg font-bold mb-2 text-indigo-700">🖼️ Yangi Banner</h2>
+                <p class="text-xs text-gray-500 mb-3">Mijoz Mini App'ni ochganda, eng tepada shu bannerlar (bir nechtasi bo'lsa, birma-bir) chiqadi.</p>
+                <form action="/admin/banners/create" method="POST" enctype="multipart/form-data" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium">Sarlavha (ixtiyoriy)</label>
+                        <input type="text" name="title" placeholder="Masalan: Yangi taomlar!" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Matn (rasm bo'lmasa shart)</label>
+                        <textarea name="text_content" rows="3" placeholder="Reklama matni..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Rasm (ixtiyoriy)</label>
+                        <input type="file" name="banner_image" accept="image/png,image/jpeg,image/webp" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Bosilganda ochiladigan havola (ixtiyoriy)</label>
+                        <input type="text" name="link_url" placeholder="https://t.me/..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium">Tartib raqami (kichigi birinchi chiqadi)</label>
+                        <input type="number" name="display_order" value="0" class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm">+ Qo'shish</button>
+                </form>
+            </div>
+
+            <div class="card-bg bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+                <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📋 Barcha Bannerlar</h2>
+                <div class="space-y-2">
+                    {% for banner in banners %}
+                    <div class="flex items-center gap-3 border rounded-lg p-3">
+                        {% if banner.image_data %}
+                        <img src="/media/banner/{{ banner.id }}" class="w-16 h-16 rounded object-cover border">
+                        {% endif %}
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold truncate">{{ banner.title or '(sarlavhasiz)' }}</p>
+                            {% if banner.text_content %}<p class="text-xs text-gray-500 truncate">{{ banner.text_content }}</p>{% endif %}
+                            <p class="text-[10px] text-gray-400">Tartib: {{ banner.display_order }}{% if banner.link_url %} · 🔗 {{ banner.link_url }}{% endif %}</p>
+                        </div>
+                        <form action="/admin/banners/{{ banner.id }}/toggle" method="POST">
+                            <button type="submit" class="text-xs px-2 py-1 rounded font-semibold {% if banner.is_active %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">
+                                {% if banner.is_active %}Faol{% else %}O'chiq{% endif %}
+                            </button>
+                        </form>
+                        <form action="/admin/banners/{{ banner.id }}/delete" method="POST" onsubmit="return confirm('O\'chirilsinmi?');">
+                            <button type="submit" class="text-red-600 font-bold text-xs">🗑️</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-400 text-center py-6">Hozircha banner yo'q</p>
+                    {% endfor %}
                 </div>
-                <div>
-                    <label class="block text-xs font-medium">Bosilganda ochiladigan havola (ixtiyoriy)</label>
-                    <input type="text" name="banner_link_url" value="{{ system_setting.banner_link_url if system_setting and system_setting.banner_link_url else '' }}" placeholder="https://t.me/..." class="w-full mt-1 p-2 border rounded-lg text-sm dark:bg-gray-800">
-                </div>
-                <label class="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="banner_is_active" value="true" {% if system_setting and system_setting.banner_is_active %}checked{% endif %}>
-                    Banner faol (Mini App'da ko'rsatilsin)
-                </label>
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-bold text-sm">Saqlash</button>
-            </form>
+            </div>
         </div>
         </section>
         {% endif %}
@@ -1442,11 +1490,29 @@
             window.scrollTo(0, 0);
         }
 
+        // Jonli sana/soat — doim O'ZBEKISTON vaqti bo'yicha ko'rsatiladi,
+        // foydalanuvchining o'z qurilma sozlamasidan qat'i nazar (Intl API
+        // orqali "Asia/Tashkent" vaqt mintaqasi ANIQ ko'rsatiladi).
+        function updateLiveClock() {
+            const el = document.getElementById('live-clock');
+            if (!el) return;
+            const now = new Date();
+            const formatted = new Intl.DateTimeFormat('uz-UZ', {
+                timeZone: 'Asia/Tashkent',
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+            }).format(now);
+            el.textContent = `🕐 ${formatted} (Toshkent)`;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
             setTheme(savedTheme);
             applyWeatherMultiplier();
             showPage(localStorage.getItem('admin_active_page') || 'bosh');
+            updateLiveClock();
+            setInterval(updateLiveClock, 1000);
         });
     </script>
 </body>

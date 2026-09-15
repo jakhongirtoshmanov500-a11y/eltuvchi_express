@@ -18,7 +18,10 @@
             <h1 class="text-lg font-bold">🛵 {{ current_user.full_name }}</h1>
             <p class="text-xs text-indigo-200">{{ current_user.phone_number }}</p>
         </div>
-        <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
+        <div class="flex items-center gap-3">
+            <div id="live-clock" class="text-[11px] font-mono text-indigo-200"></div>
+            <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
+        </div>
     </header>
 
     <div class="container mx-auto p-4 space-y-6 max-w-2xl">
@@ -49,7 +52,7 @@
             <div class="mt-3 pt-3 border-t space-y-1">
                 {% for wd in withdrawal_requests %}
                 <div class="flex justify-between text-xs">
-                    <span>{{ wd.requested_at.strftime('%d.%m %H:%M') }}</span>
+                    <span>{{ wd.requested_at|uzb_time('%d.%m %H:%M') }}</span>
                     <span class="font-semibold">{{ "%.0f"|format(wd.amount) }} so'm</span>
                     <span class="{% if wd.status.value == 'pending' %}text-amber-600{% elif wd.status.value == 'approved' %}text-green-600{% else %}text-red-600{% endif %}">
                         {% if wd.status.value == 'pending' %}⏳ Kutilmoqda{% elif wd.status.value == 'approved' %}✅ To'landi{% else %}✕ Rad etildi{% endif %}
@@ -107,7 +110,7 @@
             <div class="space-y-1 max-h-64 overflow-y-auto">
                 {% for order in history_orders %}
                 <div class="flex justify-between text-xs border-b py-1.5">
-                    <span>#{{ order.id }} — {{ order.created_at.strftime('%d.%m %H:%M') }}</span>
+                    <span>#{{ order.id }} — {{ order.created_at|uzb_time('%d.%m %H:%M') }}</span>
                     <span class="font-semibold">{{ "%.0f"|format(order.delivery_fee) }} so'm</span>
                 </div>
                 {% else %}
@@ -117,5 +120,21 @@
         </div>
 
     </div>
+
+    <script>
+        function updateLiveClock() {
+            const el = document.getElementById('live-clock');
+            if (!el) return;
+            const formatted = new Intl.DateTimeFormat('uz-UZ', {
+                timeZone: 'Asia/Tashkent',
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+            }).format(new Date());
+            el.textContent = `🕐 ${formatted}`;
+        }
+        updateLiveClock();
+        setInterval(updateLiveClock, 1000);
+    </script>
 </body>
 </html>

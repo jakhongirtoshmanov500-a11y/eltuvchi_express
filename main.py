@@ -3,7 +3,7 @@ import os
 import html
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, APIRouter, UploadFile, File
@@ -274,6 +274,23 @@ os.makedirs("static/images", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# DIQQAT: bazadagi barcha vaqtlar UTC'da saqlanadi (datetime.utcnow()) —
+# bu to'g'ri amaliyot (server qayerda joylashgani muhim emas, hammasi bir
+# xil hisoblanadi). Lekin FOYDALANUVCHIGA ko'rsatishda buni O'zbekiston
+# vaqtiga (UTC+5, yoz vaqtiga o'tish yo'q) o'girish kerak — aks holda
+# barcha vaqtlar 5 soat "orqada" ko'rinardi. Shu uchun maxsus Jinja
+# filtri qo'shamiz: {{ x.created_at|uzb_time('%d.%m.%Y %H:%M') }}
+UZB_TZ_OFFSET = timedelta(hours=5)
+
+
+def uzb_time_filter(value, fmt="%d.%m.%Y %H:%M"):
+    if value is None:
+        return "—"
+    return (value + UZB_TZ_OFFSET).strftime(fmt)
+
+
+templates.env.filters["uzb_time"] = uzb_time_filter
+
 # Routerlar. DIQQAT: `dependencies=[Depends(get_current_admin_user)]` — bu router
 # ostidagi BARCHA route'lar uchun "login qilingan bo'lishi shart" tekshiruvini
 # avtomatik qo'shadi. `require_owner` esa qo'shimcha — faqat OWNER'ga.
@@ -463,7 +480,13 @@ async def admin_dashboard(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    today = date.today()
+    # DIQQAT: date.today() server vaqti (UTC) bo'yicha hisoblaydi — bu esa
+    # O'zbekiston vaqtidan 5 soat orqada. Ya'ni Toshkentda tun yarmidan
+    # o'tib, allaqachon "ertangi kun" boshlangan bo'lsa ham, server hali
+    # "kecha" deb hisoblab, "Bugungi buyurtmalar", "Bugungi tug'ilgan
+    # kunlar" kabi hisoblarni NOTO'G'RI ko'rsatardi. Shuning uchun "bugun"
+    # tushunchasini O'ZBEKISTON vaqtiga qarab aniqlaymiz.
+    today = (datetime.utcnow() + UZB_TZ_OFFSET).date()
     is_owner = current_user.role == UserRole.OWNER
 
     # OWNER shaharni tepadagi almashtirgichdan tanlaydi (None = "Barchasi").
@@ -837,6 +860,26 @@ async def media_banner_image(banner_id: int, db: AsyncSession = Depends(get_db))
     )
 
 
+async def get_or_create_referral_code(db: AsyncSession, client: User) -> str:
+    """Har bir mijozning o'ziga xos referal kodi bo'lishi kerak — birinchi
+    marta so'ralganda generatsiya qilinadi va saqlanadi (keyingi safar
+    o'sha kodning o'zi qaytariladi, doim bir xil bo'lishi uchun)."""
+    if client.referral_code:
+        return client.referral_code
+
+    import random
+    import string
+    for _ in range(10):  # kamdan-kam holatda tasodifiy to'qnashuv bo'lsa, qayta urinamiz
+        candidate = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        existing = await db.execute(select(User).where(User.referral_code == candidate))
+        if not existing.scalars().first():
+            client.referral_code = candidate
+            return candidate
+    # Juda kam ehtimol, lekin himoya sifatida — id asosida kafolatlangan noyob kod
+    client.referral_code = f"REF{client.id}"
+    return client.referral_code
+
+
 def validate_pin(pin: str) -> None:
     """4 xonali PIN — telefonda kiritish qulay bo'lishi uchun ataylab
     qisqa. Xavfsizlik: PIN bcrypt bilan xeshlanadi (auth.py)."""
@@ -955,6 +998,47 @@ async def apply_cod_delivery_financials(db: AsyncSession, order: Order) -> None:
                     created_by_id=None,
                 ))
 
+    # ---- MIJOZGA KESHBEK VA REFERAL BONUSI ----
+    # DIQQAT: bular faqat buyurtma YETKAZIB BO'LINGANDAN keyin beriladi
+    # (bekor qilingan buyurtma uchun emas) — bu haqiqiy do'konlarda
+    # ham shunday: suiiste'mol (buyurtma berib, keyin bekor qilib,
+    # baribir bonus olish) oldini oladi.
+    client_result = await db.execute(select(User).where(User.id == order.client_id))
+    client = client_result.scalars().first()
+    if client:
+        if setting.cashback_earn_percent and setting.cashback_earn_percent > 0:
+            cashback_earned = order.total_price * (setting.cashback_earn_percent / 100)
+            client.cashback_balance += cashback_earned
+            order.cashback_earned = cashback_earned
+
+        # Referal bonusi — faqat BIRINCHI marta, faqat kimdir taklif qilgan bo'lsa
+        if client.referred_by_id and not client.referral_bonus_given and setting.referral_bonus_amount > 0:
+            delivered_count_result = await db.execute(
+                select(func.count(Order.id)).where(Order.client_id == client.id, Order.status == OrderStatus.DELIVERED)
+            )
+            delivered_count = delivered_count_result.scalar() or 0
+            if delivered_count <= 1:  # aynan shu buyurtma — birinchisi
+                referrer_result = await db.execute(select(User).where(User.id == client.referred_by_id))
+                referrer = referrer_result.scalars().first()
+                if referrer:
+                    bonus = setting.referral_bonus_amount
+                    client.cashback_balance += bonus
+                    referrer.cashback_balance += bonus
+                    client.referral_bonus_given = True
+                    try:
+                        if referrer.telegram_id:
+                            await send_telegram_message(
+                                referrer.telegram_id,
+                                f"🎁 Sizning do'stingiz birinchi buyurtmasini yetkazib oldi — sizga {bonus:,.0f} so'm keshbek berildi!",
+                            )
+                        if client.telegram_id:
+                            await send_telegram_message(
+                                client.telegram_id,
+                                f"🎁 Referal orqali kelganingiz uchun sizga ham {bonus:,.0f} so'm keshbek berildi!",
+                            )
+                    except Exception as e:
+                        print(f"Referal bildirishnomasi yuborilmadi: {e}")
+
 
 @settings_router.post("/birthday")
 async def update_birthday_setting(
@@ -971,11 +1055,13 @@ async def update_birthday_setting(
 async def update_referral_setting(
     referral_program_text: str = Form(""),
     referral_visible: bool = Form(False),
+    referral_bonus_amount: float = Form(0.0),
     db: AsyncSession = Depends(get_db),
 ):
     setting = await _get_or_create_setting(db)
     setting.referral_program_text = referral_program_text
     setting.referral_visible = referral_visible
+    setting.referral_bonus_amount = referral_bonus_amount
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -984,11 +1070,13 @@ async def update_referral_setting(
 async def update_cashback_setting(
     bonus_cashback_text: str = Form(""),
     cashback_visible: bool = Form(False),
+    cashback_earn_percent: float = Form(0.0),
     db: AsyncSession = Depends(get_db),
 ):
     setting = await _get_or_create_setting(db)
     setting.bonus_cashback_text = bonus_cashback_text
     setting.cashback_visible = cashback_visible
+    setting.cashback_earn_percent = cashback_earn_percent
     await db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -2026,8 +2114,16 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
     text = message.get("text", "")
     contact = message.get("contact")
 
-    if text == "/start":
+    if text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        referral_code_payload = parts[1].strip() if len(parts) > 1 else None
+
         bot_conversation_state.pop(chat_id, None)
+        if referral_code_payload:
+            # Referal kodini vaqtincha saqlab qo'yamiz — telefon ulashilganda
+            # (pastroqda) shu kodga tegishli odamni "taklif qiluvchi" deb yozamiz.
+            bot_conversation_state[chat_id] = {"referral_code": referral_code_payload}
+
         await send_telegram_message(
             chat_id,
             "Assalomu alaykum! 👋 <b>Eltuvchi Express</b> botiga xush kelibsiz.\n\n"
@@ -2125,11 +2221,22 @@ async def telegram_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 reply_markup=role_choice_keyboard,
             )
         else:
+            referred_by_id = None
+            pending_ref = bot_conversation_state.pop(chat_id, None)
+            if pending_ref and pending_ref.get("referral_code"):
+                referrer_result = await db.execute(
+                    select(User).where(User.referral_code == pending_ref["referral_code"])
+                )
+                referrer = referrer_result.scalars().first()
+                if referrer:
+                    referred_by_id = referrer.id
+
             new_user = User(
                 full_name=contact.get("first_name") or "Mijoz",
                 phone_number=phone,
                 role=UserRole.CLIENT,
                 telegram_id=str(chat_id),
+                referred_by_id=referred_by_id,
             )
             db.add(new_user)
             await db.commit()
@@ -2281,11 +2388,22 @@ async def shop_me(body: InitDataBody, db: AsyncSession = Depends(get_db)):
     cities_result = await db.execute(select(City).order_by(City.name))
     cities = [{"id": c.id, "name": c.name} for c in cities_result.scalars().all()]
 
+    referral_code = await get_or_create_referral_code(db, client)
+    await db.commit()
+
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "")
+
     return {
         "registered": True,
         "full_name": client.full_name,
+        "first_name": client.full_name,
+        "phone": client.phone_number,
+        "birth_date": client.birth_date.isoformat() if client.birth_date else "",
         "city_id": client.city_id,
         "cities": cities,
+        "cashback_balance": client.cashback_balance or 0.0,
+        "referral_code": referral_code,
+        "bot_username": bot_username,
     }
 
 
@@ -2365,6 +2483,54 @@ async def shop_profile_update(body: ProfileUpdateBody, db: AsyncSession = Depend
     return {"ok": True, "message": "Ma'lumotlar saqlandi!"}
 
 
+@shop_router.get("/orders")
+async def shop_order_history(init_data: str, db: AsyncSession = Depends(get_db)):
+    """Mijozning o'z buyurtmalari tarixi — Shaxsiy Kabinet bo'limida ko'rsatish uchun."""
+    tg_user = _get_telegram_user_or_403(init_data)
+    telegram_id = str(tg_user["id"])
+
+    client_result = await db.execute(
+        select(User).where(User.telegram_id == telegram_id, User.role == UserRole.CLIENT)
+    )
+    client = client_result.scalars().first()
+    if not client:
+        return []
+
+    orders_result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.partner), selectinload(Order.courier))
+        .where(Order.client_id == client.id)
+        .order_by(Order.created_at.desc())
+        .limit(30)
+    )
+    orders = orders_result.scalars().all()
+
+    # DIQQAT: frontend (shop.html) statuslarni o'zining inglizcha
+    # nomlari bilan kutadi ("pending", "accepted", "on_the_way",
+    # "delivered", "canceled") — bazamizdagi haqiqiy statuslardan
+    # (masalan "created", "cancelled") bu ko'rinishga moslashtiramiz.
+    status_map = {
+        "created": "pending",
+        "accepted_by_partner": "accepted",
+        "preparing": "accepted",
+        "looking_for_courier": "accepted",
+        "on_the_way": "on_the_way",
+        "delivered": "delivered",
+        "cancelled": "canceled",
+    }
+
+    return [
+        {
+            "id": o.id,
+            "status": status_map.get(o.status.value, o.status.value),
+            "partner_name": o.partner.brand_name if o.partner else None,
+            "total_amount": o.total_price + o.delivery_fee - (o.discount_amount or 0),
+            "courier_name": o.courier.full_name if o.courier else None,
+        }
+        for o in orders
+    ]
+
+
 @shop_router.get("/partners")
 async def shop_partners(city_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -2441,6 +2607,41 @@ async def shop_create_order(body: ShopOrderBody, db: AsyncSession = Depends(get_
             detail=f"Bu do'konda minimal buyurtma summasi {partner.min_order_amount:.0f} so'm",
         )
 
+    # ---- PROMO-KOD (bazadan HAQIQIY tekshiriladi, frontend'dan ishonib olinmaydi) ----
+    discount_amount = 0.0
+    promo_code_obj = None
+    if body.promo_code:
+        promo_result = await db.execute(
+            select(PromoCode).where(PromoCode.code == body.promo_code.strip().upper(), PromoCode.is_active == True)
+        )
+        promo_code_obj = promo_result.scalars().first()
+        if promo_code_obj:
+            expired = promo_code_obj.expires_at and promo_code_obj.expires_at < datetime.utcnow()
+            exhausted = promo_code_obj.max_uses and promo_code_obj.used_count >= promo_code_obj.max_uses
+            if expired or exhausted:
+                promo_code_obj = None
+            else:
+                already_used = await db.execute(
+                    select(PromoCodeUsage).where(
+                        PromoCodeUsage.promo_code_id == promo_code_obj.id,
+                        PromoCodeUsage.client_id == client.id,
+                    )
+                )
+                if already_used.scalars().first():
+                    promo_code_obj = None  # bitta mijoz bir kodni faqat bir marta ishlatadi
+
+        if promo_code_obj:
+            if promo_code_obj.discount_percent:
+                discount_amount = total_price * (promo_code_obj.discount_percent / 100)
+            elif promo_code_obj.discount_amount:
+                discount_amount = min(promo_code_obj.discount_amount, total_price)
+
+    # ---- KESHBEKNI ISHLATISH (mavjud balansdan ko'p ishlatib bo'lmaydi) ----
+    cashback_used = 0.0
+    if body.use_cashback and client.cashback_balance > 0:
+        remaining_after_promo = max(total_price - discount_amount, 0)
+        cashback_used = min(client.cashback_balance, remaining_after_promo)
+
     setting_result = await db.execute(select(SystemSetting))
     setting = setting_result.scalars().first()
     delivery_fee = (setting.base_delivery_fee * setting.weather_multiplier) if setting else 10000.0
@@ -2453,9 +2654,21 @@ async def shop_create_order(body: ShopOrderBody, db: AsyncSession = Depends(get_
         delivery_fee=delivery_fee,
         delivery_address=body.delivery_address,
         client_comment=body.comment,
+        order_type=body.order_type or "delivery",
+        payment_method=body.payment_method or "cash",
+        promo_code_id=promo_code_obj.id if promo_code_obj else None,
+        discount_amount=discount_amount + cashback_used,
+        cashback_used=cashback_used,
     )
     db.add(new_order)
     await db.flush()
+
+    if cashback_used > 0:
+        client.cashback_balance -= cashback_used
+
+    if promo_code_obj:
+        promo_code_obj.used_count += 1
+        db.add(PromoCodeUsage(promo_code_id=promo_code_obj.id, client_id=client.id, order_id=new_order.id))
 
     for product, qty in order_items_data:
         db.add(OrderItem(
