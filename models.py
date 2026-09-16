@@ -126,7 +126,23 @@ class PartnerProfile(Base):
 
     # Minimal buyurtma summasi — bundan kam summaga buyurtma qabul qilinmaydi
     min_order_amount = Column(Float, default=0.0)
+
+    # Do'konning xaritadagi joylashuvi — hamkor o'zi xaritadan belgilaydi
+    # (yoki brauzer orqali avtomatik aniqlanadi). Kelajakda kuryerga
+    # yo'nalish ko'rsatish uchun ham kerak bo'ladi.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     terms_accepted_at = Column(DateTime, nullable=True)
+
+    # Do'konning xaritadagi joylashuvi — hamkor o'z kabinetidan brauzer
+    # orqali avtomatik belgilaydi (Geolocation API)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+    # Yangi buyurtma kelganda hamkor kabinetida qaysi signal ovozi
+    # chalinishi — 3 ta tayyor variantdan biri (frontend Web Audio API
+    # orqali generatsiya qiladi, fayl saqlash shart emas)
+    notification_sound = Column(String, default="chime1")
 
     user = relationship("User", back_populates="partner_profile")
     city = relationship("City", back_populates="partners")
@@ -250,13 +266,17 @@ class SystemSetting(Base):
     referral_bonus_amount = Column(Float, default=0.0)
     bonus_cashback_text = Column(Text, nullable=True)
 
+    # Cashback dasturining HAQIQIY hisob-kitob qoidasi — matndan (yuqoridagi
+    # bonus_cashback_text) farqli, bu ANIQ SON, avtomatik hisoblash uchun.
+    # Masalan 2.0 = har bir yetkazilgan buyurtmaning 2%i mijozning cashback
+    # balansiga qo'shiladi.
+    cashback_earn_percent = Column(Float, default=0.0)
+
     # Referal/Bonus dasturini mijozga ko'rsatish yoki yashirish — matn tayyor
     # bo'lmasa yoki dastur vaqtincha to'xtatilgan bo'lsa, buni yoqmasdan turib
     # yashirish uchun (matnni o'chirmasdan).
     referral_visible = Column(Boolean, default=True)
     cashback_visible = Column(Boolean, default=True)
-    # Har bir buyurtmadan necha foizi keshbek sifatida mijozga qaytarilishi
-    cashback_earn_percent = Column(Float, default=0.0)
 
     # Har bir rol uchun alohida shartlar — odam shu rolni tanlaganda
     # birinchi bo'lib shu matn ko'rsatiladi, "Roziman" bosmasa davom etolmaydi.

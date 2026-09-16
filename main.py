@@ -27,6 +27,7 @@ from telegram_bot import (
     validate_telegram_init_data,
     answer_callback_query,
     close_telegram_bot_client,
+    get_bot_username,
 )
 from models import (
     User,
@@ -2391,7 +2392,7 @@ async def shop_me(body: InitDataBody, db: AsyncSession = Depends(get_db)):
     referral_code = await get_or_create_referral_code(db, client)
     await db.commit()
 
-    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "")
+    bot_username = await get_bot_username()
 
     return {
         "registered": True,

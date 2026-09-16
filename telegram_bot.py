@@ -28,6 +28,42 @@ http_client = httpx.AsyncClient(
 )
 
 
+_cached_bot_username: str | None = None
+
+
+async def get_bot_username() -> str:
+    """Botning @username'ini qaytaradi — bu referal havolasini
+    (https://t.me/BOTUSERNAME?start=...) tuzish uchun kerak.
+
+    Avval .env'dagi TELEGRAM_BOT_USERNAME'ni tekshiradi (agar owner qo'lda
+    kiritgan bo'lsa); bo'lmasa, Telegram'ning o'zidan (getMe orqali)
+    AVTOMATIK so'raydi va keshlaydi — shunda owner buni qo'lda
+    sozlashni birinchi safar oldini olishi mumkin, xatolik ehtimoli
+    kamayadi."""
+    global _cached_bot_username
+
+    env_username = os.getenv("TELEGRAM_BOT_USERNAME")
+    if env_username:
+        return env_username.lstrip("@")
+
+    if _cached_bot_username:
+        return _cached_bot_username
+
+    if not TELEGRAM_API_BASE:
+        return ""
+
+    try:
+        resp = await http_client.get(f"{TELEGRAM_API_BASE}/getMe")
+        data = resp.json()
+        username = data.get("result", {}).get("username", "")
+        if username:
+            _cached_bot_username = username
+        return username
+    except Exception as e:
+        print(f"[Ogohlantirish] Bot username'ni avtomatik aniqlab bo'lmadi: {e}")
+        return ""
+
+
 async def close_telegram_bot_client():
     """FastAPI server to'xtatilganda HTTP mijozni xotiradan xavfsiz o'chirish."""
     await http_client.aclose()
