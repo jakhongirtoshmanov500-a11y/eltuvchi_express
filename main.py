@@ -2,6 +2,7 @@ import json
 import os
 import html
 import uuid
+import math
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from typing import List, Optional
@@ -70,6 +71,15 @@ STATUS_LABELS_UZ = {
     "on_the_way": "Yo'lda",
     "delivered": "Yetkazildi",
     "cancelled": "Bekor qilindi",
+}
+
+# Kuryer kabinetida yangi buyurtma kelganda tanlash mumkin bo'lgan 3 xil
+# signal ovozi — frontend (courier.html) shu kalitlarga qarab Web Audio API
+# orqali har xil ohang generatsiya qiladi (fayl saqlash shart emas).
+COURIER_SOUND_OPTIONS = {
+    "chime1": "🔔 Klassik qo'ng'iroq",
+    "chime2": "🎵 Yumshoq melodiya",
+    "chime3": "📯 Signal (kar-kar)",
 }
 
 # Joriy holatdan "tabiiy keyingi qadam"ga tez o'tish tugmasi uchun xarita.
@@ -1041,6 +1051,97 @@ async def apply_cod_delivery_financials(db: AsyncSession, order: Order) -> None:
                         print(f"Referal bildirishnomasi yuborilmadi: {e}")
 
 
+# ==================== KURYER AVTO-BELGILASH (AUTO-ASSIGN) ====================
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Ikki nuqta (GPS koordinata) orasidagi masofani km da hisoblaydi."""
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+# Joylashuv shuncha daqiqadan eski bo'lsa, kuryer "signal yo'q/oflayn" deb hisoblanadi
+COURIER_LOCATION_FRESHNESS_MINUTES = 15
+
+
+async def auto_assign_nearest_courier(db: AsyncSession, order: "Order") -> Optional["User"]:
+    """
+    Buyurtma "Kuryer izlanmoqda" holatiga o'tganda avtomatik chaqiriladi.
+
+    Hamkorning (do'konning) joylashuvidan eng yaqin turgan, hozir ONLINE,
+    joylashuvi so'nggi COURIER_LOCATION_FRESHNESS_MINUTES daqiqa ichida
+    yangilangan va hozir boshqa buyurtmani yetkazib yurmagan kuryerni
+    avtomatik shu buyurtmaga biriktiradi.
+
+    Agar mos kuryer topilmasa (masalan hech kimning joylashuvi yo'q, yoki
+    hamkorning o'zi xaritadan manzil belgilamagan) — HECH NARSA qilmaydi,
+    buyurtma "Yangi buyurtmalar" ro'yxatida qolib, kuryerlar o'zi qo'lda
+    "Qabul qilaman" bosishi mumkin bo'lib qoladi (eski, ishonchli usul —
+    zaxira reja sifatida saqlanadi).
+
+    Muvaffaqiyatli bo'lsa — biriktirilgan User obyektini qaytaradi, aks
+    holda None.
+    """
+    if order.status != OrderStatus.LOOKING_FOR_COURIER or order.courier_id is not None:
+        return None
+
+    partner_result = await db.execute(select(PartnerProfile).where(PartnerProfile.id == order.partner_id))
+    partner = partner_result.scalars().first()
+    if not partner or partner.latitude is None or partner.longitude is None:
+        return None  # Do'kon xaritada belgilanmagan — masofani hisoblab bo'lmaydi
+
+    freshness_cutoff = datetime.utcnow() - timedelta(minutes=COURIER_LOCATION_FRESHNESS_MINUTES)
+
+    candidates_stmt = (
+        select(User)
+        .join(CourierProfile, CourierProfile.user_id == User.id)
+        .options(selectinload(User.courier_profile))
+        .where(
+            User.role == UserRole.COURIER,
+            User.is_active == True,
+            CourierProfile.is_approved == True,
+            CourierProfile.is_online == True,
+            CourierProfile.latitude.is_not(None),
+            CourierProfile.longitude.is_not(None),
+            CourierProfile.location_updated_at.is_not(None),
+            CourierProfile.location_updated_at >= freshness_cutoff,
+        )
+    )
+    if partner.city_id is not None:
+        candidates_stmt = candidates_stmt.where(User.city_id == partner.city_id)
+
+    candidates = (await db.execute(candidates_stmt)).scalars().all()
+    if not candidates:
+        return None
+
+    # Hozir band (yo'lda) bo'lmagan kuryerlarni ajratamiz
+    busy_result = await db.execute(
+        select(Order.courier_id).where(
+            Order.courier_id.in_([c.id for c in candidates]),
+            Order.status == OrderStatus.ON_THE_WAY,
+        )
+    )
+    busy_ids = {row[0] for row in busy_result.all()}
+    free_candidates = [c for c in candidates if c.id not in busy_ids]
+    if not free_candidates:
+        return None
+
+    nearest = min(
+        free_candidates,
+        key=lambda c: _haversine_km(
+            partner.latitude, partner.longitude,
+            c.courier_profile.latitude, c.courier_profile.longitude,
+        ),
+    )
+
+    order.courier_id = nearest.id
+    order.status = OrderStatus.ON_THE_WAY
+    await db.commit()
+    return nearest
+
+
 @settings_router.post("/birthday")
 async def update_birthday_setting(
     birthday_bonus_amount: float = Form(...),
@@ -1571,6 +1672,164 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db), ow
 
 
 # ==================== 6. KURYERLAR BOSHQARUVI ====================
+@couriers_router.get("/live-locations")
+async def couriers_live_locations(
+    city_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """Admin/operator xaritasi uchun JSON — barcha hozir ONLINE va
+    joylashuvi 'yangi' (COURIER_LOCATION_FRESHNESS_MINUTES ichida) bo'lgan
+    kuryerlar ro'yxati, har birining hozirgi GPS nuqtasi va (agar bor bo'lsa)
+    hozir yetkazayotgan buyurtmasi bilan. Sahifa (/admin/couriers/map) bir
+    necha sekundda bir marta shu yerga so'rov yuborib xaritani yangilaydi."""
+    is_owner = current_user.role == UserRole.OWNER
+    active_city_id = city_id if is_owner else current_user.city_id
+
+    freshness_cutoff = datetime.utcnow() - timedelta(minutes=COURIER_LOCATION_FRESHNESS_MINUTES)
+
+    stmt = (
+        select(User)
+        .join(CourierProfile, CourierProfile.user_id == User.id)
+        .options(selectinload(User.courier_profile))
+        .where(
+            User.role == UserRole.COURIER,
+            User.is_active == True,
+            CourierProfile.is_online == True,
+            CourierProfile.latitude.is_not(None),
+            CourierProfile.longitude.is_not(None),
+            CourierProfile.location_updated_at >= freshness_cutoff,
+        )
+    )
+    if active_city_id is not None:
+        stmt = stmt.where(User.city_id == active_city_id)
+
+    couriers = (await db.execute(stmt)).scalars().all()
+
+    # Har bir online kuryerning hozir yo'ldagi buyurtmasi (agar bor bo'lsa)
+    courier_ids = [c.id for c in couriers]
+    active_orders_map = {}
+    if courier_ids:
+        orders_result = await db.execute(
+            select(Order).where(Order.courier_id.in_(courier_ids), Order.status == OrderStatus.ON_THE_WAY)
+        )
+        for o in orders_result.scalars().all():
+            active_orders_map[o.courier_id] = o
+
+    data = []
+    for c in couriers:
+        cp = c.courier_profile
+        active_order = active_orders_map.get(c.id)
+        data.append({
+            "courier_id": c.id,
+            "full_name": c.full_name,
+            "phone_number": c.phone_number,
+            "transport_type": cp.transport_type,
+            "lat": cp.latitude,
+            "lng": cp.longitude,
+            "updated_at": cp.location_updated_at.isoformat() if cp.location_updated_at else None,
+            "busy": active_order is not None,
+            "active_order_id": active_order.id if active_order else None,
+            "active_order_address": active_order.delivery_address if active_order else None,
+        })
+
+    return JSONResponse({"couriers": data})
+
+
+@couriers_router.get("/map", response_class=HTMLResponse)
+async def couriers_map_page(current_user: User = Depends(get_current_admin_user)):
+    """Admin/operator uchun — barcha online kuryerlarni jonli xaritada
+    ko'rsatadigan alohida sahifa. Mavjud admin.html shabloniga bog'liq
+    bo'lmasligi uchun o'z-o'zicha (self-contained) HTML qaytaradi."""
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kuryerlar xaritasi</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body {{ margin:0; font-family: system-ui, sans-serif; }}
+  header {{ background:#4338ca; color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }}
+  header a {{ color:#e0e7ff; font-size:13px; }}
+  #map {{ height: calc(100vh - 52px); width: 100%; }}
+  .badge {{ background:#16a34a; color:#fff; border-radius:999px; padding:2px 8px; font-size:11px; }}
+  .badge.busy {{ background:#dc2626; }}
+  #count {{ font-size:13px; color:#e0e7ff; }}
+</style>
+</head>
+<body>
+  <header>
+    <div><strong>🗺️ Kuryerlar xaritasi</strong> <span id="count">(yuklanmoqda...)</span></div>
+    <a href="/admin">← Admin panelga qaytish</a>
+  </header>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map').setView([41.5504, 60.6318], 12); // Uchquduq atrofi — default markaz
+    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }}).addTo(map);
+
+    let markers = {{}};
+    let firstLoad = true;
+
+    function courierIcon(busy) {{
+        return L.divIcon({{
+            html: `<div style="background:${{busy ? '#dc2626' : '#16a34a'}}; width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+            className: '', iconSize: [16, 16], iconAnchor: [8, 8],
+        }});
+    }}
+
+    async function refresh() {{
+        try {{
+            const res = await fetch('/admin/couriers/live-locations', {{ credentials: 'same-origin' }});
+            if (!res.ok) return;
+            const data = await res.json();
+            const seen = new Set();
+            const bounds = [];
+
+            data.couriers.forEach(c => {{
+                seen.add(c.courier_id);
+                bounds.push([c.lat, c.lng]);
+                const popupText = `<b>${{c.full_name}}</b><br>${{c.phone_number}}<br>` +
+                    (c.busy ? `🛵 Buyurtma #${{c.active_order_id}}<br>📍 ${{c.active_order_address || ''}}` : '🟢 Bo\\'sh');
+
+                if (markers[c.courier_id]) {{
+                    markers[c.courier_id].setLatLng([c.lat, c.lng]);
+                    markers[c.courier_id].setIcon(courierIcon(c.busy));
+                    markers[c.courier_id].getPopup().setContent(popupText);
+                }} else {{
+                    markers[c.courier_id] = L.marker([c.lat, c.lng], {{ icon: courierIcon(c.busy) }})
+                        .addTo(map).bindPopup(popupText);
+                }}
+            }});
+
+            // Endi oflayn bo'lgan kuryerlarning belgisini xaritadan olib tashlaymiz
+            Object.keys(markers).forEach(id => {{
+                if (!seen.has(Number(id))) {{
+                    map.removeLayer(markers[id]);
+                    delete markers[id];
+                }}
+            }});
+
+            document.getElementById('count').textContent = `(${{data.couriers.length}} ta online kuryer)`;
+
+            if (firstLoad && bounds.length > 0) {{
+                map.fitBounds(bounds, {{ padding: [40, 40] }});
+                firstLoad = false;
+            }}
+        }} catch (e) {{ console.error('Xarita yangilashda xatolik', e); }}
+    }}
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>""")
+
+
 @couriers_router.post("/create")
 async def create_courier(
     full_name: str = Form(...),
@@ -2532,6 +2791,55 @@ async def shop_order_history(init_data: str, db: AsyncSession = Depends(get_db))
     ]
 
 
+@shop_router.get("/orders/{order_id}/track")
+async def shop_order_track(order_id: int, init_data: str, db: AsyncSession = Depends(get_db)):
+    """Mijoz 'Yo'lda' bo'lgan buyurtmasini JONLI kuzatishi uchun — kuryerning
+    hozirgi GPS koordinatasini qaytaradi. Frontend (shop.html) bu manzilga
+    har 5-10 sekundda so'rov yuborib, xaritadagi kuryer belgisini
+    yangilab turadi. Buyurtma boshqa mijozniki bo'lsa ko'rsatilmaydi."""
+    tg_user = _get_telegram_user_or_403(init_data)
+    telegram_id = str(tg_user["id"])
+
+    client_result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+    client = client_result.scalars().first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    order_result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.courier).selectinload(User.courier_profile), selectinload(Order.partner))
+        .where(Order.id == order_id, Order.client_id == client.id)
+    )
+    order = order_result.scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
+
+    courier_location = None
+    if order.status == OrderStatus.ON_THE_WAY and order.courier and order.courier.courier_profile:
+        cp = order.courier.courier_profile
+        if cp.latitude is not None and cp.longitude is not None:
+            courier_location = {
+                "lat": cp.latitude,
+                "lng": cp.longitude,
+                "updated_at": cp.location_updated_at.isoformat() if cp.location_updated_at else None,
+            }
+
+    return {
+        "id": order.id,
+        "status": order.status.value,
+        "delivery_address": order.delivery_address,
+        "courier_name": order.courier.full_name if order.courier else None,
+        "courier_phone": order.courier.phone_number if order.courier else None,
+        "partner_name": order.partner.brand_name if order.partner else None,
+        "partner_location": (
+            {"lat": order.partner.latitude, "lng": order.partner.longitude}
+            if order.partner and order.partner.latitude is not None and order.partner.longitude is not None
+            else None
+        ),
+        "courier_location": courier_location,
+    }
+
+
 @shop_router.get("/partners")
 async def shop_partners(city_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -2899,6 +3207,18 @@ async def partner_update_order_status(
         raise HTTPException(status_code=400, detail="Noto'g'ri holat")
     await db.commit()
 
+    # DIQQAT: agar hamkor buyurtmani "Kuryer izlash" holatiga o'tkazsa,
+    # avval ENG YAQIN online kuryerga AVTOMATIK biriktirishga harakat
+    # qilamiz. Topilmasa (masalan hech kimning joylashuvi yo'q) — eski
+    # usul ishlayveradi: buyurtma "Yangi buyurtmalar" ro'yxatida qolib,
+    # kuryerlar o'zi qo'lda qabul qiladi.
+    auto_assigned_courier = None
+    if order.status == OrderStatus.LOOKING_FOR_COURIER:
+        try:
+            auto_assigned_courier = await auto_assign_nearest_courier(db, order)
+        except Exception as e:
+            print(f"Avto-belgilashda xatolik: {e}")
+
     try:
         if order.status != old_status:
             client_result = await db.execute(select(User).where(User.id == order.client_id))
@@ -2906,6 +3226,13 @@ async def partner_update_order_status(
             if client and client.telegram_id:
                 label = STATUS_LABELS_UZ.get(order.status.value, order.status.value)
                 await send_telegram_message(client.telegram_id, f"📦 Buyurtma #{order.id} holati yangilandi:\n<b>{label}</b>")
+
+        if auto_assigned_courier and auto_assigned_courier.telegram_id:
+            await send_telegram_message(
+                auto_assigned_courier.telegram_id,
+                f"🛵 Sizga yangi buyurtma <b>avtomatik biriktirildi</b> — #{order.id}\n"
+                f"📍 {order.delivery_address}\nKuryer kabinetini oching va ko'ring.",
+            )
     except Exception as e:
         print(f"Bildirishnoma yuborishda xatolik: {e}")
 
@@ -2975,8 +3302,92 @@ async def courier_dashboard(
             "my_active_orders": my_active_orders,
             "history_orders": history_orders,
             "withdrawal_requests": withdrawal_requests,
+            "COURIER_SOUND_OPTIONS": COURIER_SOUND_OPTIONS,
         },
     )
+
+
+@courier_router_app.post("/toggle-online")
+async def courier_toggle_online(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_courier_user),
+):
+    """Kuryer 'ish boshladim / tugatdim' deb belgilaydi. FAQAT online bo'lgan
+    kuryerlar: (1) yangi buyurtmalarga avtomatik biriktiriladi, (2) admin
+    xaritasida ko'rinadi. Oflaynga o'tganda joylashuv "eskiradi" va bir
+    necha daqiqadan keyin xarita/auto-assign'da e'tiborga olinmay qoladi."""
+    result = await db.execute(select(CourierProfile).where(CourierProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Kuryer profili topilmadi")
+    profile.is_online = not profile.is_online
+    await db.commit()
+    return RedirectResponse(url="/courier", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@courier_router_app.post("/location")
+async def courier_update_location(
+    lat: float = Form(...),
+    lng: float = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_courier_user),
+):
+    """Brauzerning Geolocation API'sidan muntazam (har 15-20 sekundda)
+    chaqiriladigan 'jonli joylashuv' manzili — mijoz/admin xaritasi va
+    auto-assign masofa hisob-kitobi aynan shu yerdan oziqlanadi."""
+    result = await db.execute(select(CourierProfile).where(CourierProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Kuryer profili topilmadi")
+    profile.latitude = lat
+    profile.longitude = lng
+    profile.location_updated_at = datetime.utcnow()
+    await db.commit()
+    return JSONResponse({"ok": True})
+
+
+@courier_router_app.post("/settings/sound")
+async def courier_update_sound(
+    notification_sound: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_courier_user),
+):
+    """Yangi buyurtma kelganda chalinadigan signal ovozini tanlash (3 xil)."""
+    if notification_sound not in COURIER_SOUND_OPTIONS:
+        raise HTTPException(status_code=400, detail="Noto'g'ri ovoz varianti")
+    result = await db.execute(select(CourierProfile).where(CourierProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Kuryer profili topilmadi")
+    profile.notification_sound = notification_sound
+    await db.commit()
+    return JSONResponse({"ok": True, "notification_sound": notification_sound})
+
+
+@courier_router_app.get("/orders/available.json")
+async def courier_available_orders_json(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_courier_user),
+):
+    """Kuryer kabineti sahifasi bir necha sekundda bir marta shu yerga
+    so'rov yuborib turadi (poll qiladi) — agar yangi buyurtma ID'si oldingi
+    ro'yxatda bo'lmasa, frontend tanlangan signal ovozini chaladi. Bu —
+    to'liq WebSocket infratuzilmasisiz ishlaydigan, oddiy va ishonchli usul."""
+    available_stmt = select(Order.id).where(
+        Order.status == OrderStatus.LOOKING_FOR_COURIER, Order.courier_id.is_(None)
+    )
+    if current_user.city_id is not None:
+        available_stmt = available_stmt.join(PartnerProfile, Order.partner_id == PartnerProfile.id).where(
+            PartnerProfile.city_id == current_user.city_id
+        )
+    ids = [row[0] for row in (await db.execute(available_stmt)).all()]
+
+    my_active_stmt = select(Order.id).where(
+        Order.courier_id == current_user.id, Order.status == OrderStatus.ON_THE_WAY
+    )
+    my_ids = [row[0] for row in (await db.execute(my_active_stmt)).all()]
+
+    return JSONResponse({"available_ids": ids, "my_active_ids": my_ids})
 
 
 @courier_router_app.post("/withdraw")
