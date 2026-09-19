@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ partner.brand_name }} — Hamkor Kabineti</title>
+    <title>{{ partner.brand_name if partner else 'Hamkor' }} — Hamkor Kabineti</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -15,16 +15,18 @@
 
     <header class="bg-indigo-700 text-white p-4 flex justify-between items-center shadow-md">
         <div>
-            <h1 class="text-lg font-bold">🏪 {{ partner.brand_name }}</h1>
-            <p class="text-xs text-indigo-200">{{ current_user.full_name }}</p>
+            <h1 class="text-lg font-bold">🏪 {{ partner.brand_name if partner else 'Hamkor Kabineti' }}</h1>
+            <p class="text-xs text-indigo-200">{{ current_user.full_name if current_user else '' }}</p>
         </div>
         <div id="live-clock" class="text-[11px] font-mono text-indigo-200"></div>
         <div class="flex items-center gap-3">
+            {% if partner %}
             <form action="/partner/status" method="POST">
                 <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-bold {% if partner.is_open %}bg-green-500{% else %}bg-gray-500{% endif %}">
                     {% if partner.is_open %}🟢 Ochiq{% else %}🔴 Yopiq{% endif %}
                 </button>
             </form>
+            {% endif %}
             <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
         </div>
     </header>
@@ -35,10 +37,10 @@
         <div class="bg-white p-4 rounded-xl shadow-md">
             <div class="flex justify-between items-center mb-3">
                 <span class="text-sm text-gray-500">💰 Joriy balansingiz</span>
-                <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance) }} so'm</span>
+                <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance if partner else 0) }} so'm</span>
             </div>
             <form action="/partner/withdraw" method="POST" class="flex gap-2">
-                <input type="number" name="amount" placeholder="Summa" max="{{ partner.balance }}" class="flex-1 p-2 border rounded-lg text-sm" required>
+                <input type="number" name="amount" placeholder="Summa" max="{{ partner.balance if partner else 0 }}" class="flex-1 p-2 border rounded-lg text-sm" required>
                 <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap">💸 Yechib olish</button>
             </form>
             {% if withdrawal_requests %}
@@ -60,7 +62,7 @@
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar</h2>
             <div class="space-y-3">
-                {% for order in orders %}
+                {% for order in orders if orders %}
                 <div class="border rounded-lg p-3">
                     <div class="flex justify-between items-start mb-2">
                         <div>
@@ -68,7 +70,7 @@
                             <span class="text-xs text-gray-400 ml-2">{{ order.created_at|uzb_time('%d.%m %H:%M') }}</span>
                         </div>
                         <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {{ status_labels.get(order.status.value, order.status.value) }}
+                            {{ status_labels.get(order.status.value, order.status.value) if status_labels else order.status.value }}
                         </span>
                     </div>
                     <p class="text-xs text-gray-500 mb-1">📍 {{ order.delivery_address }}</p>
@@ -136,7 +138,7 @@
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-lg font-bold mb-4 text-indigo-700">📋 Menyu</h2>
             <div class="space-y-2">
-                {% for product in products %}
+                {% for product in products if products %}
                 <form action="/partner/products/{{ product.id }}/update" method="POST" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-center border-b pb-2">
                     {% if product.image_url %}<img src="{{ product.image_url }}" class="w-10 h-10 rounded object-cover">{% endif %}
                     <input type="text" name="name" value="{{ product.name }}" class="flex-1 min-w-[100px] p-1.5 border rounded text-sm">
