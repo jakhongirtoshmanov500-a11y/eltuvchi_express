@@ -3,9 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ partner.brand_name if partner else 'Hamkor' }} — Hamkor Kabineti</title>
+    <title>{{ partner.brand_name }} — Hamkor Kabineti</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --accent: #4f46e5;
+            --accent-dark: #4338ca;
+        }
+        .accent-bg { background-color: var(--accent); }
+        .accent-bg:hover { background-color: var(--accent-dark); }
+        .accent-text { color: var(--accent); }
+        .accent-border { border-color: var(--accent); }
+        .tab-btn.active { border-bottom: 2px solid var(--accent); color: var(--accent); font-weight: 700; }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <script>
@@ -13,64 +24,61 @@
         if (tg) { tg.ready(); tg.expand(); }
     </script>
 
-    <header class="bg-indigo-700 text-white p-4 flex justify-between items-center shadow-md">
-        <div>
-            <h1 class="text-lg font-bold">🏪 {{ partner.brand_name if partner else 'Hamkor Kabineti' }}</h1>
-            <p class="text-xs text-indigo-200">{{ current_user.full_name if current_user else '' }}</p>
+    <header class="text-white p-4 shadow-md accent-bg">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-lg font-bold">🏪 {{ partner.brand_name }}</h1>
+                <p class="text-xs text-indigo-100">{{ current_user.full_name }}</p>
+            </div>
+            <div id="live-clock" class="text-[11px] font-mono text-indigo-100 hidden sm:block"></div>
+            <div class="flex items-center gap-2">
+                <div class="relative">
+                    <button onclick="document.getElementById('theme-menu').classList.toggle('hidden')" class="text-xs bg-white/15 px-2 py-1.5 rounded-lg">🎨</button>
+                    <div id="theme-menu" class="hidden absolute right-0 mt-1 bg-white rounded-lg shadow-lg p-2 flex gap-1.5 z-20">
+                        <button onclick="setTheme('#4f46e5','#4338ca')" class="w-6 h-6 rounded-full bg-indigo-600 border-2 border-white shadow"></button>
+                        <button onclick="setTheme('#059669','#047857')" class="w-6 h-6 rounded-full bg-emerald-600 border-2 border-white shadow"></button>
+                        <button onclick="setTheme('#e11d48','#be123c')" class="w-6 h-6 rounded-full bg-rose-600 border-2 border-white shadow"></button>
+                        <button onclick="setTheme('#d97706','#b45309')" class="w-6 h-6 rounded-full bg-amber-600 border-2 border-white shadow"></button>
+                        <button onclick="setTheme('#334155','#1e293b')" class="w-6 h-6 rounded-full bg-slate-700 border-2 border-white shadow"></button>
+                    </div>
+                </div>
+                <a href="/logout" class="text-xs underline text-indigo-100">Chiqish</a>
+            </div>
         </div>
-        <div id="live-clock" class="text-[11px] font-mono text-indigo-200"></div>
-        <div class="flex items-center gap-3">
-            {% if partner %}
-            <form action="/partner/status" method="POST">
-                <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-bold {% if partner.is_open %}bg-green-500{% else %}bg-gray-500{% endif %}">
-                    {% if partner.is_open %}🟢 Ochiq{% else %}🔴 Yopiq{% endif %}
-                </button>
-            </form>
-            {% endif %}
-            <a href="/logout" class="text-xs underline text-indigo-200">Chiqish</a>
-        </div>
+        <form action="/partner/status" method="POST" class="mt-2">
+            <button type="submit" class="px-3 py-1 rounded-lg text-xs font-bold {% if partner.is_open %}bg-green-500{% else %}bg-gray-500{% endif %}">
+                {% if partner.is_open %}🟢 Ochiq{% else %}🔴 Yopiq{% endif %}
+            </button>
+        </form>
     </header>
 
-    <div class="container mx-auto mt-6 p-4 space-y-6 max-w-3xl">
+    <!-- YANGI BUYURTMA BANNERI (JS orqali ko'rinadi) -->
+    <div id="new-order-banner-slot"></div>
 
-        <!-- BALANS -->
-        <div class="bg-white p-4 rounded-xl shadow-md">
-            <div class="flex justify-between items-center mb-3">
-                <span class="text-sm text-gray-500">💰 Joriy balansingiz</span>
-                <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance if partner else 0) }} so'm</span>
-            </div>
-            <form action="/partner/withdraw" method="POST" class="flex gap-2">
-                <input type="number" name="amount" placeholder="Summa" max="{{ partner.balance if partner else 0 }}" class="flex-1 p-2 border rounded-lg text-sm" required>
-                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap">💸 Yechib olish</button>
-            </form>
-            {% if withdrawal_requests %}
-            <div class="mt-3 pt-3 border-t space-y-1">
-                {% for wd in withdrawal_requests %}
-                <div class="flex justify-between text-xs">
-                    <span>{{ wd.requested_at|uzb_time('%d.%m %H:%M') }}</span>
-                    <span class="font-semibold">{{ "%.0f"|format(wd.amount) }} so'm</span>
-                    <span class="{% if wd.status.value == 'pending' %}text-amber-600{% elif wd.status.value == 'approved' %}text-green-600{% else %}text-red-600{% endif %}">
-                        {% if wd.status.value == 'pending' %}⏳ Kutilmoqda{% elif wd.status.value == 'approved' %}✅ To'landi{% else %}✕ Rad etildi{% endif %}
-                    </span>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-        </div>
+    <!-- BO'LIM TANLASH -->
+    <div class="bg-white border-b sticky top-0 z-10 flex overflow-x-auto">
+        <button onclick="showTab('orders')" data-tab-btn="orders" class="tab-btn active px-4 py-3 text-sm whitespace-nowrap">📦 Buyurtmalar</button>
+        <button onclick="showTab('history')" data-tab-btn="history" class="tab-btn px-4 py-3 text-sm whitespace-nowrap">📜 Tarix</button>
+        <button onclick="showTab('menu')" data-tab-btn="menu" class="tab-btn px-4 py-3 text-sm whitespace-nowrap">📋 Menyu</button>
+        <button onclick="showTab('balance')" data-tab-btn="balance" class="tab-btn px-4 py-3 text-sm whitespace-nowrap">💰 Balans</button>
+        <button onclick="showTab('settings')" data-tab-btn="settings" class="tab-btn px-4 py-3 text-sm whitespace-nowrap">⚙️ Sozlamalar</button>
+    </div>
 
-        <!-- BUYURTMALAR -->
-        <div class="bg-white p-6 rounded-xl shadow-md">
-            <h2 class="text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar</h2>
+    <div class="container mx-auto p-4 space-y-6 max-w-3xl">
+
+        <!-- BUGUNGI BUYURTMALAR -->
+        <div id="tab-orders" class="tab-page bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-4 accent-text">📦 Bugungi Buyurtmalar</h2>
             <div class="space-y-3">
-                {% for order in orders if orders %}
+                {% for order in today_orders %}
                 <div class="border rounded-lg p-3">
                     <div class="flex justify-between items-start mb-2">
                         <div>
                             <span class="font-bold text-sm">#{{ order.id }}</span>
-                            <span class="text-xs text-gray-400 ml-2">{{ order.created_at|uzb_time('%d.%m %H:%M') }}</span>
+                            <span class="text-xs text-gray-400 ml-2">{{ order.created_at|uzb_time('%H:%M') }}</span>
                         </div>
                         <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {{ status_labels.get(order.status.value, order.status.value) if status_labels else order.status.value }}
+                            {{ status_labels.get(order.status.value, order.status.value) }}
                         </span>
                     </div>
                     <p class="text-xs text-gray-500 mb-1">📍 {{ order.delivery_address }}</p>
@@ -102,71 +110,187 @@
                     {% elif order.status.value == 'accepted_by_partner' %}
                     <form action="/partner/orders/{{ order.id }}/status" method="POST">
                         <input type="hidden" name="new_status" value="preparing">
-                        <button type="submit" class="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-bold">🍳 Tayyorlashni boshladim</button>
+                        <button type="submit" class="w-full text-white py-1.5 rounded-lg text-xs font-bold accent-bg">🍳 Tayyorlashni boshladim</button>
                     </form>
                     {% elif order.status.value == 'preparing' %}
                     <form action="/partner/orders/{{ order.id }}/status" method="POST">
                         <input type="hidden" name="new_status" value="looking_for_courier">
-                        <button type="submit" class="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-bold">📦 Tayyor — kuryer kerak</button>
+                        <button type="submit" class="w-full text-white py-1.5 rounded-lg text-xs font-bold accent-bg">📦 Tayyor — kuryer kerak</button>
                     </form>
                     {% endif %}
                 </div>
                 {% else %}
-                <p class="text-sm text-gray-400 text-center py-6">Hozircha buyurtma yo'q</p>
+                <p class="text-sm text-gray-400 text-center py-6">Bugun hali buyurtma yo'q</p>
                 {% endfor %}
             </div>
         </div>
 
-        <!-- MAHSULOT QO'SHISH -->
-        <div class="bg-white p-6 rounded-xl shadow-md">
-            <h2 class="text-lg font-bold mb-4 text-indigo-700">🍕 Yangi Mahsulot Qo'shish</h2>
-            <form action="/partner/products/create" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <input type="text" name="name" placeholder="Nomi" class="p-2 border rounded-lg text-sm md:col-span-2" required>
-                <input type="number" name="price" placeholder="Narxi" class="p-2 border rounded-lg text-sm" required>
-                <button type="submit" class="bg-green-600 text-white rounded-lg text-sm font-bold">+ Qo'shish</button>
-                <input type="text" name="category" list="category-suggestions" placeholder="Kategoriya (masalan: Fastfood)" value="Boshqa" class="p-2 border rounded-lg text-sm md:col-span-2">
-                <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="p-1.5 border rounded-lg text-xs md:col-span-2">
-                <datalist id="category-suggestions">
-                    <option value="Ichimliklar"><option value="Fastfood"><option value="Pitsalar">
-                    <option value="Shashliklar"><option value="Salatlar"><option value="Shirinliklar"><option value="Boshqa">
-                </datalist>
-                <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-4">
-            </form>
-        </div>
-
-        <!-- MAHSULOTLAR RO'YXATI -->
-        <div class="bg-white p-6 rounded-xl shadow-md">
-            <h2 class="text-lg font-bold mb-4 text-indigo-700">📋 Menyu</h2>
-            <div class="space-y-2">
-                {% for product in products if products %}
-                <form action="/partner/products/{{ product.id }}/update" method="POST" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-center border-b pb-2">
-                    {% if product.image_url %}<img src="{{ product.image_url }}" class="w-10 h-10 rounded object-cover">{% endif %}
-                    <input type="text" name="name" value="{{ product.name }}" class="flex-1 min-w-[100px] p-1.5 border rounded text-sm">
-                    <input type="number" name="price" value="{{ product.price }}" class="w-20 p-1.5 border rounded text-sm">
-                    <input type="text" name="category" value="{{ product.category or 'Boshqa' }}" list="category-suggestions" class="w-24 p-1.5 border rounded text-sm">
-                    <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="w-28 text-[10px]">
-                    <input type="text" name="description" value="{{ product.description or '' }}" class="flex-1 min-w-[100px] p-1.5 border rounded text-sm" placeholder="Tavsif">
-                    <button type="submit" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Saqlash</button>
-                </form>
-                <div class="flex justify-end gap-2 -mt-1 mb-1">
-                    <form action="/partner/products/{{ product.id }}/toggle" method="POST">
-                        <button type="submit" class="text-[10px] px-2 py-0.5 rounded {% if product.is_available %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                            {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
-                        </button>
-                    </form>
-                    <form action="/partner/products/{{ product.id }}/delete" method="POST" onsubmit="return confirm('O\'chirilsinmi?');">
-                        <button type="submit" class="text-[10px] text-red-600 font-bold">🗑️ O'chirish</button>
-                    </form>
+        <!-- BUYURTMALAR TARIXI -->
+        <div id="tab-history" class="tab-page bg-white p-6 rounded-xl shadow-md hidden">
+            <h2 class="text-lg font-bold mb-4 accent-text">📜 Buyurtmalar Tarixi</h2>
+            <div class="space-y-2 max-h-[32rem] overflow-y-auto">
+                {% for order in history_orders %}
+                <div class="border rounded-lg p-3 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold">#{{ order.id }}</span>
+                        <span class="text-xs text-gray-400">{{ order.created_at|uzb_time('%d.%m.%Y %H:%M') }}</span>
+                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-100 text-blue-800">
+                            {{ status_labels.get(order.status.value, order.status.value) }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">👤 {{ order.client.full_name if order.client else '—' }} · {{ "%.0f"|format(order.total_price) }} so'm</p>
                 </div>
                 {% else %}
-                <p class="text-sm text-gray-400 text-center py-4">Hozircha mahsulot yo'q</p>
+                <p class="text-sm text-gray-400 text-center py-6">Hozircha tarix yo'q</p>
                 {% endfor %}
             </div>
+        </div>
+
+        <!-- MENYU -->
+        <div id="tab-menu" class="tab-page hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-lg font-bold mb-4 accent-text">🍕 Yangi Mahsulot Qo'shish</h2>
+                <form action="/partner/products/create" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <input type="text" name="name" placeholder="Nomi" class="p-2 border rounded-lg text-sm md:col-span-2" required>
+                    <input type="number" name="price" placeholder="Narxi" class="p-2 border rounded-lg text-sm" required>
+                    <button type="submit" class="bg-green-600 text-white rounded-lg text-sm font-bold">+ Qo'shish</button>
+                    <input type="text" name="category" list="category-suggestions" placeholder="Kategoriya (masalan: Fastfood)" value="Boshqa" class="p-2 border rounded-lg text-sm md:col-span-2">
+                    <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="p-1.5 border rounded-lg text-xs md:col-span-2">
+                    <datalist id="category-suggestions">
+                        <option value="Ichimliklar"><option value="Fastfood"><option value="Pitsalar">
+                        <option value="Shashliklar"><option value="Salatlar"><option value="Shirinliklar"><option value="Boshqa">
+                    </datalist>
+                    <input type="text" name="description" placeholder="Tavsif (ixtiyoriy)" class="p-2 border rounded-lg text-sm md:col-span-4">
+                </form>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-lg font-bold mb-4 accent-text">📋 Menyu</h2>
+                <div class="space-y-2">
+                    {% for product in products %}
+                    <form action="/partner/products/{{ product.id }}/update" method="POST" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-center border-b pb-2">
+                        {% if product.image_url %}<img src="{{ product.image_url }}" class="w-10 h-10 rounded object-cover">{% endif %}
+                        <input type="text" name="name" value="{{ product.name }}" class="flex-1 min-w-[100px] p-1.5 border rounded text-sm">
+                        <input type="number" name="price" value="{{ product.price }}" class="w-20 p-1.5 border rounded text-sm">
+                        <input type="text" name="category" value="{{ product.category or 'Boshqa' }}" list="category-suggestions" class="w-24 p-1.5 border rounded text-sm">
+                        <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="w-28 text-[10px]">
+                        <input type="text" name="description" value="{{ product.description or '' }}" class="flex-1 min-w-[100px] p-1.5 border rounded text-sm" placeholder="Tavsif">
+                        <button type="submit" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Saqlash</button>
+                    </form>
+                    <div class="flex justify-end gap-2 -mt-1 mb-1">
+                        <form action="/partner/products/{{ product.id }}/toggle" method="POST">
+                            <button type="submit" class="text-[10px] px-2 py-0.5 rounded {% if product.is_available %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {% if product.is_available %}Mavjud{% else %}Tugagan{% endif %}
+                            </button>
+                        </form>
+                        <form action="/partner/products/{{ product.id }}/delete" method="POST" onsubmit="return confirm('O\'chirilsinmi?');">
+                            <button type="submit" class="text-[10px] text-red-600 font-bold">🗑️ O'chirish</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-400 text-center py-4">Hozircha mahsulot yo'q</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- BALANS -->
+        <div id="tab-balance" class="tab-page hidden bg-white p-4 rounded-xl shadow-md">
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-sm text-gray-500">💰 Joriy balansingiz</span>
+                <span class="text-xl font-bold text-green-600">{{ "%.0f"|format(partner.balance) }} so'm</span>
+            </div>
+            <form action="/partner/withdraw" method="POST" class="flex gap-2">
+                <input type="number" name="amount" placeholder="Summa" max="{{ partner.balance }}" class="flex-1 p-2 border rounded-lg text-sm" required>
+                <button type="submit" class="text-white px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap accent-bg">💸 Yechib olish</button>
+            </form>
+            {% if withdrawal_requests %}
+            <div class="mt-3 pt-3 border-t space-y-1">
+                {% for wd in withdrawal_requests %}
+                <div class="flex justify-between text-xs">
+                    <span>{{ wd.requested_at|uzb_time('%d.%m %H:%M') }}</span>
+                    <span class="font-semibold">{{ "%.0f"|format(wd.amount) }} so'm</span>
+                    <span class="{% if wd.status.value == 'pending' %}text-amber-600{% elif wd.status.value == 'approved' %}text-green-600{% else %}text-red-600{% endif %}">
+                        {% if wd.status.value == 'pending' %}⏳ Kutilmoqda{% elif wd.status.value == 'approved' %}✅ To'landi{% else %}✕ Rad etildi{% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- SOZLAMALAR -->
+        <div id="tab-settings" class="tab-page hidden bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-lg font-bold mb-4 accent-text">⚙️ Do'kon Sozlamalari</h2>
+            <p class="text-xs text-gray-500 mb-4">Nomi, manzili, joylashuvi va yangi buyurtma signalini shu yerdan o'zgartirasiz. Komissiya, ish vaqti va shahar — faqat egasi tomonidan o'zgartiriladi.</p>
+
+            <form action="/partner/settings/update" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium">Do'kon nomi</label>
+                    <input type="text" name="brand_name" value="{{ partner.brand_name }}" class="w-full mt-1 p-2 border rounded-lg text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium">Manzil (matn)</label>
+                    <input type="text" name="address" value="{{ partner.address }}" class="w-full mt-1 p-2 border rounded-lg text-sm" required>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium mb-1">Xaritadagi joylashuv</label>
+                    <input type="hidden" name="latitude" id="partner-lat" value="{{ partner.latitude or '' }}">
+                    <input type="hidden" name="longitude" id="partner-lng" value="{{ partner.longitude or '' }}">
+                    <button type="button" onclick="detectLocation()" class="w-full bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-sm font-semibold mb-2">📍 Joylashuvni aniqlash (GPS)</button>
+                    <p id="location-status" class="text-[11px] text-gray-500">
+                        {% if partner.latitude and partner.longitude %}
+                        ✅ Joylashuv belgilangan ({{ "%.5f"|format(partner.latitude) }}, {{ "%.5f"|format(partner.longitude) }})
+                        {% else %}
+                        Hali joylashuv belgilanmagan.
+                        {% endif %}
+                    </p>
+                    {% if partner.latitude and partner.longitude %}
+                    <iframe id="map-preview" class="w-full h-40 rounded-lg border mt-2"
+                        src="https://www.openstreetmap.org/export/embed.html?bbox={{ partner.longitude - 0.005 }}%2C{{ partner.latitude - 0.005 }}%2C{{ partner.longitude + 0.005 }}%2C{{ partner.latitude + 0.005 }}&marker={{ partner.latitude }}%2C{{ partner.longitude }}">
+                    </iframe>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium mb-2">Yangi buyurtma signali</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        {% for sound_id, sound_label in [("chime1", "🔔 Signal 1"), ("chime2", "🔔🔔 Signal 2"), ("chime3", "🎵 Signal 3")] %}
+                        <label class="flex flex-col items-center gap-1 p-2 border rounded-lg cursor-pointer {% if partner.notification_sound == sound_id or (not partner.notification_sound and sound_id == 'chime1') %}accent-border bg-indigo-50{% endif %}">
+                            <input type="radio" name="notification_sound" value="{{ sound_id }}" class="hidden sound-radio" {% if partner.notification_sound == sound_id or (not partner.notification_sound and sound_id == 'chime1') %}checked{% endif %}>
+                            <span class="text-xs font-semibold">{{ sound_label }}</span>
+                            <button type="button" onclick="playSound('{{ sound_id }}')" class="text-[10px] accent-text underline">Eshitib ko'rish</button>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full text-white py-2.5 rounded-lg font-bold text-sm accent-bg">Saqlash</button>
+            </form>
         </div>
 
     </div>
 
     <script>
+        // ---- BO'LIMLAR (tab) ----
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-page').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-' + tabName).classList.remove('hidden');
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-tab-btn="${tabName}"]`).classList.add('active');
+            localStorage.setItem('partner_active_tab', tabName);
+        }
+
+        // ---- MAVZU (rang) ----
+        function setTheme(main, dark) {
+            document.documentElement.style.setProperty('--accent', main);
+            document.documentElement.style.setProperty('--accent-dark', dark);
+            localStorage.setItem('partner_theme', JSON.stringify({ main, dark }));
+            document.getElementById('theme-menu').classList.add('hidden');
+        }
+
+        // ---- JONLI SOAT ----
         function updateLiveClock() {
             const el = document.getElementById('live-clock');
             if (!el) return;
@@ -178,8 +302,114 @@
             }).format(new Date());
             el.textContent = `🕐 ${formatted}`;
         }
-        updateLiveClock();
-        setInterval(updateLiveClock, 1000);
+
+        // ---- JOYLASHUVNI GPS ORQALI ANIQLASH ----
+        function detectLocation() {
+            const status = document.getElementById('location-status');
+            if (!navigator.geolocation) {
+                status.textContent = "Bu brauzer joylashuvni aniqlashni qo'llab-quvvatlamaydi.";
+                return;
+            }
+            status.textContent = "🔄 Aniqlanmoqda...";
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    document.getElementById('partner-lat').value = pos.coords.latitude;
+                    document.getElementById('partner-lng').value = pos.coords.longitude;
+                    status.textContent = `✅ Aniqlandi (${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}) — "Saqlash" bosing.`;
+                },
+                (err) => {
+                    status.textContent = "Joylashuvni aniqlab bo'lmadi: " + err.message + ". Brauzer sozlamalarida joylashuvga ruxsat berilganini tekshiring.";
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        document.querySelectorAll('.sound-radio').forEach(radio => {
+            radio.addEventListener('change', () => {
+                document.querySelectorAll('.sound-radio').forEach(r => {
+                    r.closest('label').classList.remove('accent-border', 'bg-indigo-50');
+                });
+                if (radio.checked) radio.closest('label').classList.add('accent-border', 'bg-indigo-50');
+            });
+        });
+
+        // ---- OVOZ SIGNALLARI (tashqi fayl kerak emas — brauzerning o'zida generatsiya qilinadi) ----
+        let audioCtx = null;
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+        function beep(freq, startTime, duration, ctx) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.3, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        }
+        function playSound(soundId) {
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            if (soundId === 'chime1') {
+                beep(880, now, 0.15, ctx);
+                beep(1046, now + 0.15, 0.2, ctx);
+            } else if (soundId === 'chime2') {
+                beep(660, now, 0.12, ctx);
+                beep(660, now + 0.18, 0.12, ctx);
+                beep(880, now + 0.36, 0.25, ctx);
+            } else {
+                beep(523, now, 0.1, ctx);
+                beep(659, now + 0.1, 0.1, ctx);
+                beep(784, now + 0.2, 0.1, ctx);
+                beep(1046, now + 0.3, 0.3, ctx);
+            }
+        }
+
+        // ---- YANGI BUYURTMA UCHUN AVTOMATIK SIGNAL (poll qilish) ----
+        const CURRENT_SOUND = "{{ partner.notification_sound or 'chime1' }}";
+        let lastKnownOrderCount = null;
+
+        async function checkForNewOrders() {
+            try {
+                const res = await fetch('/partner/api/new-orders-count');
+                const data = await res.json();
+                if (lastKnownOrderCount !== null && data.count > lastKnownOrderCount) {
+                    playSound(CURRENT_SOUND);
+                    showNewOrderBanner();
+                }
+                lastKnownOrderCount = data.count;
+            } catch (e) {
+                console.error('Yangi buyurtma tekshirishda xatolik:', e);
+            }
+        }
+
+        function showNewOrderBanner() {
+            const slot = document.getElementById('new-order-banner-slot');
+            if (document.getElementById('new-order-banner')) return;
+            const banner = document.createElement('div');
+            banner.id = 'new-order-banner';
+            banner.className = 'fixed top-16 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 text-sm font-bold cursor-pointer';
+            banner.textContent = '🔔 Yangi buyurtma keldi! Yangilash uchun bosing';
+            banner.onclick = () => window.location.reload();
+            slot.appendChild(banner);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('partner_theme');
+            if (savedTheme) {
+                const { main, dark } = JSON.parse(savedTheme);
+                document.documentElement.style.setProperty('--accent', main);
+                document.documentElement.style.setProperty('--accent-dark', dark);
+            }
+            showTab(localStorage.getItem('partner_active_tab') || 'orders');
+            updateLiveClock();
+            setInterval(updateLiveClock, 1000);
+            checkForNewOrders();
+            setInterval(checkForNewOrders, 15000);
+        });
     </script>
 </body>
 </html>
