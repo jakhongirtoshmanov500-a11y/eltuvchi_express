@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eltuvchi Express — Admin Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
     </script>
@@ -27,7 +29,12 @@
         html.dark .nav-btn.active { background-color: #4f46e5; color: white; }
     </style>
 </head>
-<body id="app-body" class="bg-gray-100 text-gray-800 transition-colors duration-300">
+<body id="app-body" class="bg-gray-100 text-gray-800 transition-colors duration-300"
+      data-active-city-id="{{ active_city_id if active_city_id is not none else '' }}"
+      data-couriers="{{ couriers_json }}"
+      data-order-statuses="{{ order_statuses_json }}"
+      data-status-labels="{{ status_labels_json }}"
+      data-next-status-map="{{ next_status_map_json }}">
 
     <header id="main-header" class="bg-indigo-700 text-white p-4 shadow-md flex justify-between items-center transition-colors duration-300">
         <h1 class="text-xl font-bold flex items-center gap-2">
@@ -258,7 +265,13 @@
 
         <!-- ORDERS -->
         <div class="card-bg bg-white p-6 rounded-xl shadow-md">
-            <h2 class="theme-title text-lg font-bold mb-4 text-indigo-700">📦 Buyurtmalar Boshqaruvi</h2>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="theme-title text-lg font-bold text-indigo-700">📦 Buyurtmalar Boshqaruvi</h2>
+                <span class="text-xs font-semibold flex items-center gap-1.5 text-gray-500">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Jonli yangilanadi
+                </span>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -271,9 +284,9 @@
                             <th class="p-3 text-center">Amallar</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y text-sm dark:divide-gray-700">
+                    <tbody id="orders-tbody" class="divide-y text-sm dark:divide-gray-700">
                         {% for order in orders %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" data-order-row="{{ order.id }}">
                             <td class="p-3 font-bold">
                                 <button type="button" data-order-id="{{ order.id }}" onclick="toggleOrderDetails(this.dataset.orderId)" class="text-indigo-600">#{{ order.id }} 🔍</button>
                             </td>
@@ -281,10 +294,10 @@
                             <td class="theme-text p-3 font-semibold text-indigo-600">{{ order.total_price }} so'm</td>
                             <td class="p-3 font-semibold">{{ order.delivery_fee }} so'm</td>
                             <td class="p-3">
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ status_labels.get(order.status.value, order.status.value) }}</span>
+                                <span class="order-status-badge px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ status_labels.get(order.status.value, order.status.value) }}</span>
                             </td>
                             <td class="p-3 text-center">
-                                <div class="flex flex-col gap-1 items-center">
+                                <div class="order-actions-slot flex flex-col gap-1 items-center">
                                     {% if order.status.value in next_status_map %}
                                     <form action="/admin/orders/{{ order.id }}/update" method="POST">
                                         <input type="hidden" name="new_status" value="{{ next_status_map[order.status.value][0] }}">
@@ -306,6 +319,9 @@
                                         </select>
                                         <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
                                     </form>
+                                    {% if order.courier_id %}
+                                     <button type="button" data-id="{{ partner.id }}" onclick="openSetLoginModal(this)" class="text-[10px] text-indigo-600 font-semibold underline">🔑 Kirish berish</button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -340,6 +356,20 @@
 
         <section class="app-page" data-page="kuryerlar" style="display:none;">
         <!-- COURIERS -->
+
+        <!-- JONLI XARITA -->
+        <div class="card-bg bg-white p-4 rounded-xl shadow-md mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="theme-title text-lg font-bold text-indigo-700">🗺️ Kuryerlar — Jonli Xarita</h2>
+                <span class="text-xs font-semibold flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span id="courier-map-count" class="text-gray-500">yuklanmoqda...</span>
+                </span>
+            </div>
+            <div id="courier-map" style="height: 380px; border-radius: 0.75rem;"></div>
+            <p class="text-[11px] text-gray-400 mt-2">🟢 bo'sh · 🔴 hozir buyurtma yetkazmoqda. Xarita har 5 soniyada o'zi yangilanadi.</p>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             <!-- Kuryer Qo'shish Formasi -->
@@ -400,8 +430,11 @@
                         </thead>
                         <tbody class="divide-y text-sm dark:divide-gray-700">
                             {% for courier in all_couriers %}
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                                <td class="p-2 font-medium">{{ courier.full_name }}</td>
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" data-courier-row="{{ courier.id }}">
+                                <td class="p-2 font-medium">
+                                    <span class="gps-dot inline-block w-2 h-2 rounded-full bg-gray-300 mr-1" data-gps-for="{{ courier.id }}" title="GPS holati"></span>
+                                    {{ courier.full_name }}
+                                </td>
                                 <td class="p-2 text-xs">{{ courier.phone_number }}</td>
                                 <td class="p-2 text-xs">
                                     {% if courier.courier_profile %}{{ courier.courier_profile.transport_type }}{% endif %}
@@ -1323,7 +1356,7 @@
 
         function toggleOrderDetails(orderId) {
             const row = document.getElementById(`order-details-${orderId}`);
-            row.classList.toggle('hidden');
+            if (row) row.classList.toggle('hidden');
         }
 
         function openEditPartnerModal(btn) {
@@ -1506,6 +1539,227 @@
             el.textContent = `🕐 ${formatted} (Toshkent)`;
         }
 
+        // ==================== JONLI YANGILANISH (kuryerlar xaritasi + buyurtmalar) ====================
+        // DIQQAT: bu yerdagi ma'lumotlar Jinja orqali to'g'ridan-to'g'ri JS
+        // ichiga emas, <body> tegidagi data-* atributlardan JSON.parse bilan
+        // o'qiladi — try/catch bilan o'ralgan, shuning uchun shablon biror
+        // sababdan noto'g'ri render bo'lsa ham, faqat "jonli yangilanish"
+        // o'chib qoladi, butun sahifa JS'i yiqilib qolmaydi.
+        const _appBody = document.getElementById('app-body');
+        const ADMIN_ACTIVE_CITY_ID = (_appBody && _appBody.dataset.activeCityId) ? Number(_appBody.dataset.activeCityId) : null;
+        let ADMIN_COURIERS = [], ORDER_STATUSES = [], STATUS_LABELS = {}, NEXT_STATUS_MAP = {};
+        try {
+            ADMIN_COURIERS = JSON.parse((_appBody && _appBody.dataset.couriers) || '[]');
+            ORDER_STATUSES = JSON.parse((_appBody && _appBody.dataset.orderStatuses) || '[]');
+            STATUS_LABELS = JSON.parse((_appBody && _appBody.dataset.statusLabels) || '{}');
+            NEXT_STATUS_MAP = JSON.parse((_appBody && _appBody.dataset.nextStatusMap) || '{}');
+        } catch (e) {
+            console.error('Jonli yangilanish uchun sozlamalarni o\'qishda xatolik:', e);
+        }
+
+        function esc(v) {
+            if (v === null || v === undefined) return '';
+            return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ---- 1) KURYERLAR — JONLI XARITA ----
+        let courierMap = null;
+        let courierMarkers = {};
+        let courierMapFirstLoad = true;
+
+        function initCourierMap() {
+            if (courierMap || !document.getElementById('courier-map') || typeof L === 'undefined') return;
+            courierMap = L.map('courier-map').setView([41.5504, 60.6318], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19, attribution: '&copy; OpenStreetMap'
+            }).addTo(courierMap);
+        }
+
+        function courierDotIcon(busy) {
+            return L.divIcon({
+                html: `<div style="background:${busy ? '#dc2626' : '#16a34a'}; width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+                className: '', iconSize: [16, 16], iconAnchor: [8, 8],
+            });
+        }
+
+        function refreshCourierLocations() {
+            const url = '/admin/couriers/live-locations' + (ADMIN_ACTIVE_CITY_ID !== null ? ('?city_id=' + ADMIN_ACTIVE_CITY_ID) : '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (!data) return;
+
+                    document.querySelectorAll('.gps-dot').forEach(dot => {
+                        dot.classList.remove('bg-green-500', 'bg-red-500');
+                        dot.classList.add('bg-gray-300');
+                    });
+                    data.couriers.forEach(c => {
+                        const dot = document.querySelector(`.gps-dot[data-gps-for="${c.courier_id}"]`);
+                        if (dot) {
+                            dot.classList.remove('bg-gray-300');
+                            dot.classList.add(c.busy ? 'bg-red-500' : 'bg-green-500');
+                            dot.title = c.busy ? `Yo'lda — buyurtma #${c.active_order_id}` : "Bo'sh, online";
+                        }
+                    });
+
+                    const countEl = document.getElementById('courier-map-count');
+                    if (countEl) countEl.textContent = `${data.couriers.length} ta online kuryer`;
+
+                    if (!courierMap) return;
+                    const seen = new Set();
+                    const bounds = [];
+                    data.couriers.forEach(c => {
+                        seen.add(c.courier_id);
+                        bounds.push([c.lat, c.lng]);
+                        const popupText = `<b>${esc(c.full_name)}</b><br>${esc(c.phone_number)}<br>` +
+                            (c.busy ? `🛵 Buyurtma #${c.active_order_id}<br>📍 ${esc(c.active_order_address || '')}` : "🟢 Bo'sh");
+                        if (courierMarkers[c.courier_id]) {
+                            courierMarkers[c.courier_id].setLatLng([c.lat, c.lng]);
+                            courierMarkers[c.courier_id].setIcon(courierDotIcon(c.busy));
+                            courierMarkers[c.courier_id].getPopup().setContent(popupText);
+                        } else {
+                            courierMarkers[c.courier_id] = L.marker([c.lat, c.lng], { icon: courierDotIcon(c.busy) })
+                                .addTo(courierMap).bindPopup(popupText);
+                        }
+                    });
+                    Object.keys(courierMarkers).forEach(id => {
+                        if (!seen.has(Number(id))) {
+                            courierMap.removeLayer(courierMarkers[id]);
+                            delete courierMarkers[id];
+                        }
+                    });
+                    if (courierMapFirstLoad && bounds.length > 0) {
+                        courierMap.fitBounds(bounds, { padding: [30, 30] });
+                        courierMapFirstLoad = false;
+                    }
+                })
+                .catch(e => console.error('Kuryerlar xaritasini yangilashda xatolik', e));
+        }
+
+        function showCourierOnMap(courierId) {
+            showPage('kuryerlar');
+            setTimeout(() => {
+                initCourierMap();
+                const marker = courierMarkers[courierId];
+                if (marker) {
+                    courierMap.setView(marker.getLatLng(), 15);
+                    marker.openPopup();
+                } else {
+                    alert("Bu kuryerning joylashuvi hozircha noma'lum (oflayn yoki GPS signali yo'q).");
+                }
+            }, 50);
+        }
+
+        // ---- 2) BUYURTMALAR — JONLI JADVAL (F5siz avto-yangilanish) ----
+        function renderOrderActionsHtml(o) {
+            const next = NEXT_STATUS_MAP[o.status];
+            let out = '<div class="order-actions-slot flex flex-col gap-1 items-center">';
+            if (next) {
+                out += `
+                    <form action="/admin/orders/${o.id}/update" method="POST">
+                        <input type="hidden" name="new_status" value="${esc(next[0])}">
+                        <input type="hidden" name="courier_id" value="${o.courier_id || ''}">
+                        <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded font-semibold whitespace-nowrap">${esc(next[1])}</button>
+                    </form>`;
+            }
+            const courierOptions = ['<option value="">Kuryer tanlang</option>']
+                .concat(ADMIN_COURIERS.map(c => `<option value="${c.id}" ${o.courier_id === c.id ? 'selected' : ''}>${esc(c.full_name)}</option>`))
+                .join('');
+            const statusOptions = ORDER_STATUSES.map(st => `<option value="${st}" ${o.status === st ? 'selected' : ''}>${esc(STATUS_LABELS[st] || st)}</option>`).join('');
+            out += `
+                <form action="/admin/orders/${o.id}/update" method="POST" class="inline-flex gap-1">
+                    <select name="courier_id" class="text-xs p-1 border rounded dark:bg-gray-800">${courierOptions}</select>
+                    <select name="new_status" class="text-xs p-1 border rounded dark:bg-gray-800">${statusOptions}</select>
+                    <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
+                </form>`;
+            if (o.courier_id) {
+                out += `<button type="button" onclick="showCourierOnMap(${o.courier_id})" class="text-[10px] bg-gray-100 text-gray-700 px-2 py-1 rounded font-semibold">📍 Xaritada ko'rish</button>`;
+            }
+            out += '</div>';
+            return out;
+        }
+
+        function renderOrderMainRow(o) {
+            const statusLabel = STATUS_LABELS[o.status] || o.status;
+            return `<tr class="hover:bg-gray-50 dark:hover:bg-gray-800" data-order-row="${o.id}">
+                <td class="p-3 font-bold"><button type="button" data-order-id="${o.id}" onclick="toggleOrderDetails(this.dataset.orderId)" class="text-indigo-600">#${o.id} 🔍</button></td>
+                <td class="p-3">${esc(o.delivery_address)}</td>
+                <td class="theme-text p-3 font-semibold text-indigo-600">${o.total_price} so'm</td>
+                <td class="p-3 font-semibold">${o.delivery_fee} so'm</td>
+                <td class="p-3"><span class="order-status-badge px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">${esc(statusLabel)}</span></td>
+                <td class="p-3 text-center">${renderOrderActionsHtml(o)}</td>
+            </tr>`;
+        }
+
+        function renderOrderDetailRow(o, hidden) {
+            let itemsHtml;
+            if (o.items && o.items.length) {
+                itemsHtml = '<ul class="text-xs space-y-0.5">' + o.items.map(it =>
+                    `<li>• ${esc(it.product_name)} — ${it.quantity} x ${it.unit_price} so'm = ${it.quantity * it.unit_price} so'm</li>`
+                ).join('') + '</ul>';
+            } else {
+                itemsHtml = '<p class="text-xs text-gray-400">Bu buyurtma uchun mahsulot tarkibi saqlanmagan (eski buyurtma).</p>';
+            }
+            return `<tr id="order-details-${o.id}" class="${hidden ? 'hidden ' : ''}bg-gray-50 dark:bg-gray-800/50">
+                <td colspan="6" class="p-3">
+                    <p class="text-xs mb-1">👤 <b>Mijoz:</b> ${esc(o.client_name || '—')} · <a href="tel:${esc(o.client_phone || '')}" class="underline text-indigo-600">${esc(o.client_phone || '—')}</a></p>
+                    ${o.courier_name ? `<p class="text-xs mb-1">🛵 <b>Kuryer:</b> ${esc(o.courier_name)} · <a href="tel:${esc(o.courier_phone || '')}" class="underline text-indigo-600">${esc(o.courier_phone || '')}</a></p>` : ''}
+                    ${o.client_comment ? `<p class="text-xs mb-2 bg-amber-50 text-amber-700 rounded px-2 py-1 inline-block">💬 ${esc(o.client_comment)}</p>` : ''}
+                    <p class="text-xs font-semibold mb-1 mt-1">Buyurtma tarkibi:</p>
+                    ${itemsHtml}
+                </td>
+            </tr>`;
+        }
+
+        function refreshOrders() {
+            const url = '/admin/orders/live.json' + (ADMIN_ACTIVE_CITY_ID !== null ? ('?city_id=' + ADMIN_ACTIVE_CITY_ID) : '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(res => res.ok ? res.json() : null)
+                .then(orders => {
+                    if (!orders) return;
+                    const tbody = document.getElementById('orders-tbody');
+                    if (!tbody) return;
+
+                    orders.forEach(o => {
+                        const sig = `${o.status}|${o.courier_id}|${o.courier_name}`;
+                        const existingMain = tbody.querySelector(`tr[data-order-row="${o.id}"]`);
+
+                        if (existingMain) {
+                            if (existingMain.dataset.sig === sig) return;
+                            const actionsSlot = existingMain.querySelector('.order-actions-slot');
+                            if (actionsSlot && actionsSlot.contains(document.activeElement)) return;
+
+                            const detailRow = document.getElementById(`order-details-${o.id}`);
+                            const wasHidden = !detailRow || detailRow.classList.contains('hidden');
+                            const newMainTpl = document.createElement('template');
+                            newMainTpl.innerHTML = renderOrderMainRow(o).trim();
+                            const newDetailTpl = document.createElement('template');
+                            newDetailTpl.innerHTML = renderOrderDetailRow(o, wasHidden).trim();
+
+                            newMainTpl.content.firstChild.dataset.sig = sig;
+                            newMainTpl.content.firstChild.classList.add('bg-amber-50');
+                            existingMain.replaceWith(newMainTpl.content.firstChild);
+                            if (detailRow) detailRow.replaceWith(newDetailTpl.content.firstChild);
+                            const freshMain = tbody.querySelector(`tr[data-order-row="${o.id}"]`);
+                            if (freshMain) setTimeout(() => freshMain.classList.remove('bg-amber-50'), 4000);
+                        } else {
+                            const mainTpl = document.createElement('template');
+                            mainTpl.innerHTML = renderOrderMainRow(o).trim();
+                            const detailTpl = document.createElement('template');
+                            detailTpl.innerHTML = renderOrderDetailRow(o, true).trim();
+                            mainTpl.content.firstChild.dataset.sig = sig;
+                            mainTpl.content.firstChild.classList.add('bg-amber-50');
+
+                            tbody.insertBefore(detailTpl.content.firstChild, tbody.firstChild);
+                            tbody.insertBefore(mainTpl.content.firstChild, tbody.firstChild);
+                            const freshMain = tbody.querySelector(`tr[data-order-row="${o.id}"]`);
+                            if (freshMain) setTimeout(() => freshMain.classList.remove('bg-amber-50'), 6000);
+                        }
+                    });
+                })
+                .catch(e => console.error('Buyurtmalarni yangilashda xatolik', e));
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('admin_theme') || 'indigo';
             setTheme(savedTheme);
@@ -1513,6 +1767,13 @@
             showPage(localStorage.getItem('admin_active_page') || 'bosh');
             updateLiveClock();
             setInterval(updateLiveClock, 1000);
+
+            if (document.getElementById('courier-map')) initCourierMap();
+            refreshCourierLocations();
+            setInterval(refreshCourierLocations, 5000);
+
+            refreshOrders();
+            setInterval(refreshOrders, 8000);
         });
     </script>
 </body>

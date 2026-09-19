@@ -7,7 +7,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100 min-h-screen" data-courier-online="{{ 'true' if (courier_profile and courier_profile.is_online) else 'false' }}">
     <script>
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.ready(); tg.expand(); }
@@ -184,7 +184,9 @@
             return audioCtx;
         }
 
-        function tone(ctx, freq, startTime, duration, type = 'sine', peakGain = 0.35) {
+        function tone(ctx, freq, startTime, duration, type, peakGain) {
+            type = type || 'sine';
+            peakGain = peakGain === undefined ? 0.35 : peakGain;
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.type = type;
@@ -198,19 +200,16 @@
         }
 
         const COURIER_SOUNDS = {
-            // 1) Klassik qo'ng'iroq — ikki notali, ko'tarilib boruvchi "ding-dong"
-            chime1: (ctx) => {
+            chime1: function (ctx) {
                 const t = ctx.currentTime;
                 tone(ctx, 880, t, 0.35, 'sine');
                 tone(ctx, 1318.5, t + 0.18, 0.45, 'sine');
             },
-            // 2) Yumshoq melodiya — uch notali arpeggio
-            chime2: (ctx) => {
+            chime2: function (ctx) {
                 const t = ctx.currentTime;
-                [523.25, 659.25, 783.99].forEach((f, i) => tone(ctx, f, t + i * 0.14, 0.35, 'triangle', 0.3));
+                [523.25, 659.25, 783.99].forEach(function (f, i) { tone(ctx, f, t + i * 0.14, 0.35, 'triangle', 0.3); });
             },
-            // 3) Signal (kar-kar) — qisqa, takrorlanuvchi "urgent" bip-bip
-            chime3: (ctx) => {
+            chime3: function (ctx) {
                 const t = ctx.currentTime;
                 for (let i = 0; i < 3; i++) tone(ctx, 988, t + i * 0.22, 0.14, 'square', 0.25);
             },
@@ -221,11 +220,10 @@
             try { fn(getAudioCtx()); } catch (e) { console.error('Ovoz chalishda xatolik', e); }
         }
 
-        // Tanlangan variantni saqlash (radio bosilganda/label ustiga bosilganda)
-        document.querySelectorAll('#sound-options [data-sound-option]').forEach(label => {
-            label.addEventListener('click', async () => {
+        document.querySelectorAll('#sound-options [data-sound-option]').forEach(function (label) {
+            label.addEventListener('click', function () {
                 const key = label.getAttribute('data-sound-option');
-                document.querySelectorAll('#sound-options [data-sound-option]').forEach(l => {
+                document.querySelectorAll('#sound-options [data-sound-option]').forEach(function (l) {
                     l.classList.remove('border-indigo-500', 'bg-indigo-50');
                     l.classList.add('border-gray-200');
                     l.querySelector('input[type=radio]').checked = false;
@@ -235,46 +233,53 @@
                 label.querySelector('input[type=radio]').checked = true;
                 playCourierSound(key);
 
-                try {
-                    const fd = new FormData();
-                    fd.append('notification_sound', key);
-                    const res = await fetch('/courier/settings/sound', { method: 'POST', body: fd, credentials: 'same-origin' });
-                    const statusEl = document.getElementById('sound-save-status');
-                    if (res.ok) {
-                        statusEl.textContent = '✅ Saqlandi';
-                        setTimeout(() => statusEl.textContent = '', 1500);
-                    }
-                } catch (e) { console.error('Ovozni saqlashda xatolik', e); }
+                const fd = new FormData();
+                fd.append('notification_sound', key);
+                fetch('/courier/settings/sound', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (res) {
+                        const statusEl = document.getElementById('sound-save-status');
+                        if (res.ok && statusEl) {
+                            statusEl.textContent = '✅ Saqlandi';
+                            setTimeout(function () { statusEl.textContent = ''; }, 1500);
+                        }
+                    })
+                    .catch(function (e) { console.error('Ovozni saqlashda xatolik', e); });
             });
         });
     </script>
 
     <!-- ================= JONLI JOYLASHUV (faqat "Onlayn" bo'lganda) ================= -->
     <script>
-       const COURIER_IS_ONLINE = "{{ 'true' if (courier_profile and courier_profile.is_online) else 'false' }}" === "true";
+        // DIQQAT: qiymat JS ichiga to'g'ridan-to'g'ri Jinja orqali emas, balki
+        // <body>'dagi data-courier-online атributidan o'qiladi — bu ancha
+        // xavfsizroq: agar biror sababdan shablon noto'g'ri render bo'lsa ham,
+        // bu yerda oddiy JS xatosi (false qiymat) bo'ladi, butun skript
+        // "Unexpected token" bilan yiqilib, keyingi barcha skriptlarni
+        // ishlamay qoldirmaydi.
+        const COURIER_IS_ONLINE = document.body.getAttribute('data-courier-online') === 'true';
 
-        async function sendLocation(lat, lng) {
-            try {
-                const fd = new FormData();
-                fd.append('lat', lat);
-                fd.append('lng', lng);
-                await fetch('/courier/location', { method: 'POST', body: fd, credentials: 'same-origin' });
-                const el = document.getElementById('gps-status-label');
-                if (el) el.textContent = '📍 Joylashuv yangilandi — ' + new Date().toLocaleTimeString('uz-UZ');
-            } catch (e) { console.error('Joylashuvni yuborishda xatolik', e); }
+        function sendLocation(lat, lng) {
+            const fd = new FormData();
+            fd.append('lat', lat);
+            fd.append('lng', lng);
+            fetch('/courier/location', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function () {
+                    const el = document.getElementById('gps-status-label');
+                    if (el) el.textContent = '📍 Joylashuv yangilandi — ' + new Date().toLocaleTimeString('uz-UZ');
+                })
+                .catch(function (e) { console.error('Joylashuvni yuborishda xatolik', e); });
         }
 
         function startLiveLocationTracking() {
             if (!('geolocation' in navigator)) return;
-            // Darhol bir marta, keyin har 20 sekundda
             navigator.geolocation.getCurrentPosition(
-                pos => sendLocation(pos.coords.latitude, pos.coords.longitude),
-                err => { const el = document.getElementById('gps-status-label'); if (el) el.textContent = '⚠️ Joylashuvga ruxsat berilmadi'; },
+                function (pos) { sendLocation(pos.coords.latitude, pos.coords.longitude); },
+                function () { const el = document.getElementById('gps-status-label'); if (el) el.textContent = '⚠️ Joylashuvga ruxsat berilmadi'; },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
             navigator.geolocation.watchPosition(
-                pos => sendLocation(pos.coords.latitude, pos.coords.longitude),
-                err => console.error('Geolocation xatosi', err),
+                function (pos) { sendLocation(pos.coords.latitude, pos.coords.longitude); },
+                function (err) { console.error('Geolocation xatosi', err); },
                 { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
             );
         }
@@ -286,38 +291,37 @@
 
     <!-- ================= YANGI BUYURTMANI ANIQLASH (poll) VA OVOZ CHALISH ================= -->
     <script>
-        let knownAvailableIds = null; // birinchi so'rovda "boshlang'ich holat" sifatida saqlanadi, ovoz chalinmaydi
+        let knownAvailableIds = null;
         let knownActiveIds = null;
 
-        async function pollForNewOrders() {
-            try {
-                const res = await fetch('/courier/orders/available.json', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const data = await res.json();
+        function pollForNewOrders() {
+            fetch('/courier/orders/available.json', { credentials: 'same-origin' })
+                .then(function (res) { return res.ok ? res.json() : null; })
+                .then(function (data) {
+                    if (!data) return;
 
-                if (knownAvailableIds === null) {
-                    knownAvailableIds = new Set(data.available_ids);
-                    knownActiveIds = new Set(data.my_active_ids);
-                    return;
-                }
-
-                const newAvailable = data.available_ids.some(id => !knownAvailableIds.has(id));
-                const newlyAssignedToMe = data.my_active_ids.some(id => !knownActiveIds.has(id));
-
-                if (newAvailable || newlyAssignedToMe) {
-                    const savedSound = document.querySelector('#sound-options input[type=radio]:checked');
-                    playCourierSound(savedSound ? savedSound.value : 'chime1');
-                    if (window.Telegram?.WebApp?.HapticFeedback) {
-                        window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                    if (knownAvailableIds === null) {
+                        knownAvailableIds = data.available_ids.slice();
+                        knownActiveIds = data.my_active_ids.slice();
+                        return;
                     }
-                    // Sahifani biroz kutib qayta yuklaymiz — shunda yangi buyurtma
-                    // kartasi (yoki "Sizda hozir yo'lda" bloki) ko'rinadi.
-                    setTimeout(() => window.location.reload(), 2500);
-                }
 
-                knownAvailableIds = new Set(data.available_ids);
-                knownActiveIds = new Set(data.my_active_ids);
-            } catch (e) { console.error('Buyurtmalarni tekshirishda xatolik', e); }
+                    const newAvailable = data.available_ids.some(function (id) { return knownAvailableIds.indexOf(id) === -1; });
+                    const newlyAssignedToMe = data.my_active_ids.some(function (id) { return knownActiveIds.indexOf(id) === -1; });
+
+                    if (newAvailable || newlyAssignedToMe) {
+                        const savedSound = document.querySelector('#sound-options input[type=radio]:checked');
+                        playCourierSound(savedSound ? savedSound.value : 'chime1');
+                        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+                            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                        }
+                        setTimeout(function () { window.location.reload(); }, 2500);
+                    }
+
+                    knownAvailableIds = data.available_ids.slice();
+                    knownActiveIds = data.my_active_ids.slice();
+                })
+                .catch(function (e) { console.error('Buyurtmalarni tekshirishda xatolik', e); });
         }
 
         if (COURIER_IS_ONLINE) {

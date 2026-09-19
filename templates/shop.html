@@ -12,6 +12,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
+    <!-- Leaflet — kuryerni jonli kuzatish xaritasi uchun -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
         body.theme-default { background-color: #f8fafc; color: #0f172a; }
         body.theme-dark { background-color: #0f172a; color: #f8fafc; }
@@ -106,6 +110,25 @@
         </div>
     </main>
 
+    <!-- KURYERNI JONLI KUZATISH — buyurtma "Yo'lda" bo'lganda ochiladi. DIQQAT:
+         bu #app'DAN TASHQARIDA joylashgan — chunki openProfile() va boshqa
+         funksiyalar #app.innerHTML'ni to'liq almashtirib turadi; agar shu
+         oyna #app ichida bo'lganida, sahifa almashganda u ham yo'qolib
+         qolardi. -->
+    <div id="tracking-overlay" class="hidden fixed inset-0 z-40 bg-slate-900/95 flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-white/10">
+            <div>
+                <h2 class="text-sm font-black text-white">🛵 Buyurtma #<span id="tracking-order-id"></span></h2>
+                <p id="tracking-courier-info" class="text-[11px] text-slate-400 mt-0.5">Kuryer qidirilmoqda...</p>
+            </div>
+            <button onclick="closeOrderTracking()" class="text-white bg-white/10 w-8 h-8 rounded-full flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="tracking-map" class="flex-1"></div>
+        <div class="p-3 bg-slate-900 border-t border-white/10 text-center">
+            <p id="tracking-status-text" class="text-[11px] text-slate-400">Joylashuv har 6 soniyada yangilanadi</p>
+        </div>
+    </div>
+
     <!-- Savat Paneli -->
     <div id="cart-bar" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white p-3.5 rounded-2xl shadow-2xl flex justify-between items-center cursor-pointer transition-all duration-300 active:scale-95 z-50 border border-slate-800" onclick="openCart()">
         <div class="flex items-center space-x-3">
@@ -176,6 +199,100 @@
             const res = await fetch(`/api/shop${path}${separator}init_data=${encodeURIComponent(initData)}`);
             if (!res.ok) throw new Error("Xatolik yuz berdi");
             return res.json();
+        }
+
+        // ==================== KURYERNI JONLI KUZATISH ====================
+        let trackingMap = null;
+        let trackingCourierMarker = null;
+        let trackingPartnerMarker = null;
+        let trackingPollTimer = null;
+        let trackingOrderId = null;
+
+        function escTrack(v) {
+            if (v === null || v === undefined) return '';
+            return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function openOrderTracking(orderId) {
+            trackingOrderId = orderId;
+            document.getElementById('tracking-order-id').textContent = orderId;
+            document.getElementById('tracking-overlay').classList.remove('hidden');
+
+            if (!trackingMap && typeof L !== 'undefined') {
+                trackingMap = L.map('tracking-map').setView([41.5504, 60.6318], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+                }).addTo(trackingMap);
+            }
+            setTimeout(() => { if (trackingMap) trackingMap.invalidateSize(); }, 100);
+
+            pollOrderTracking();
+            if (trackingPollTimer) clearInterval(trackingPollTimer);
+            trackingPollTimer = setInterval(pollOrderTracking, 6000);
+        }
+
+        function closeOrderTracking() {
+            document.getElementById('tracking-overlay').classList.add('hidden');
+            if (trackingPollTimer) { clearInterval(trackingPollTimer); trackingPollTimer = null; }
+            trackingOrderId = null;
+        }
+
+        function getMotorbikeIcon() {
+            return L.divIcon({
+                html: '<div style="background:#4f46e5; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:3px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.4); font-size:15px;">🛵</div>',
+                className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+            });
+        }
+        function getShopIcon() {
+            return L.divIcon({
+                html: '<div style="background:#f59e0b; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.4); font-size:12px;">🏪</div>',
+                className: '', iconSize: [24, 24], iconAnchor: [12, 12],
+            });
+        }
+
+        async function pollOrderTracking() {
+            if (!trackingOrderId) return;
+            try {
+                const data = await apiGet(`/orders/${trackingOrderId}/track`);
+                const infoEl = document.getElementById('tracking-courier-info');
+                const statusEl = document.getElementById('tracking-status-text');
+                if (!infoEl || !statusEl) return;
+
+                if (data.status !== 'on_the_way') {
+                    infoEl.textContent = data.status === 'delivered' ? "✅ Buyurtma yetkazildi!" : "Buyurtma holati o'zgardi";
+                    statusEl.textContent = '';
+                    if (trackingPollTimer) { clearInterval(trackingPollTimer); trackingPollTimer = null; }
+                    if (data.status === 'delivered') setTimeout(closeOrderTracking, 2500);
+                    return;
+                }
+
+                infoEl.textContent = data.courier_name ? `${data.courier_name} — ${data.courier_phone || ''}` : 'Kuryer belgilandi';
+
+                if (!trackingMap) return; // Leaflet yuklanmagan bo'lishi mumkin (tarmoq muammosi) — xavfsiz chiqamiz
+
+                if (data.partner_location && !trackingPartnerMarker) {
+                    trackingPartnerMarker = L.marker([data.partner_location.lat, data.partner_location.lng], { icon: getShopIcon() })
+                        .addTo(trackingMap).bindPopup(escTrack(data.partner_name || "Do'kon"));
+                }
+
+                if (data.courier_location) {
+                    const pos = [data.courier_location.lat, data.courier_location.lng];
+                    if (trackingCourierMarker) {
+                        trackingCourierMarker.setLatLng(pos);
+                    } else {
+                        trackingCourierMarker = L.marker(pos, { icon: getMotorbikeIcon() }).addTo(trackingMap);
+                    }
+                    const bounds = [pos];
+                    if (trackingPartnerMarker) bounds.push(trackingPartnerMarker.getLatLng());
+                    if (bounds.length > 1) trackingMap.fitBounds(bounds, { padding: [50, 80] });
+                    else trackingMap.setView(pos, 15);
+                    statusEl.textContent = '📍 Joylashuv yangilandi — ' + new Date().toLocaleTimeString('uz-UZ');
+                } else {
+                    statusEl.textContent = "Kuryerning GPS signali hozircha yo'q — biroz kuting";
+                }
+            } catch (e) {
+                console.error('Kuryerni kuzatishda xatolik', e);
+            }
         }
 
         function renderLoading(msg) {
@@ -325,6 +442,7 @@
                                 <span class="font-bold text-title">${Number(order.total_amount).toLocaleString()} so'm</span>
                             </div>
                             ${order.courier_name ? `<div class="text-[10px] text-amber-600 mt-1 font-medium"><i class="fa-solid fa-motorcycle mr-1"></i> Kuryer: ${order.courier_name}</div>` : ''}
+                            ${order.status === 'on_the_way' ? `<button onclick="openOrderTracking(${order.id})" class="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[11px] font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-1.5"><i class="fa-solid fa-location-crosshairs"></i> Kuryerni jonli kuzatish</button>` : ''}
                         </div>`;
                 }).join('');
             }
