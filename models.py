@@ -106,21 +106,18 @@ class CourierProfile(Base):
     terms_accepted_at = Column(DateTime, nullable=True)
 
     # Kuryerning JONLI joylashuvi — brauzer/Telegram Mini App'dagi Geolocation
-    # API orqali muntazam (masalan har 15-20 sekundda) yuboriladi. Shu ikki
-    # ustun orqali: (1) mijoz o'z buyurtmasini xaritada jonli kuzatadi,
-    # (2) admin/operator panelida barcha kuryerlar xaritada ko'rinadi,
-    # (3) yangi buyurtma kelganda ENG YAQIN online kuryerga avtomatik
-    # belgilash (auto-assign) uchun masofa hisoblanadi.
+    # API orqali muntazam (har 15-20 sekundda) yuboriladi. Shu orqali: (1)
+    # mijoz buyurtmasini xaritada jonli kuzatadi, (2) admin/operator
+    # panelida barcha kuryerlar xaritada ko'rinadi, (3) yangi buyurtma
+    # kelganda ENG YAQIN online kuryerga avtomatik belgilash (auto-assign)
+    # uchun masofa hisoblanadi.
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    # Joylashuv oxirgi marta qachon yangilanganini bilish uchun — agar bu
-    # "eski" bo'lsa (masalan 15+ daqiqa), kuryer aslida oflayn/signal yo'q
-    # deb hisoblanadi va auto-assign/xaritada ko'rsatishda e'tiborga olinmaydi.
     location_updated_at = Column(DateTime, nullable=True)
 
     # Yangi buyurtma kelganda kuryer kabinetida qaysi signal ovozi chalinishi —
-    # hamkor panelidagi notification_sound bilan bir xil mantiq: 3 ta tayyor
-    # variantdan biri, frontend Web Audio API orqali generatsiya qiladi.
+    # hamkor profilidagi notification_sound bilan bir xil mantiq: 3 ta
+    # tayyor variantdan biri, frontend Web Audio API orqali generatsiya qiladi.
     notification_sound = Column(String, default="chime1")
 
     user = relationship("User", back_populates="courier_profile")
