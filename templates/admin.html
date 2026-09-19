@@ -320,7 +320,7 @@
                                         <button type="submit" class="theme-btn bg-indigo-600 text-white text-xs px-2 py-1 rounded">Saqlash</button>
                                     </form>
                                     {% if order.courier_id %}
-                                     <button type="button" data-id="{{ partner.id }}" onclick="openSetLoginModal(this)" class="text-[10px] text-indigo-600 font-semibold underline">🔑 Kirish berish</button>
+                                    <button type="button" onclick="showCourierOnMap({{ order.courier_id }})" class="text-[10px] bg-gray-100 text-gray-700 px-2 py-1 rounded font-semibold">📍 Xaritada ko'rish</button>
                                     {% endif %}
                                 </div>
                             </td>
